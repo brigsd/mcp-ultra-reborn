@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "gemini-web": {
+      "command": "python",
+      "args": ["mcp-gemini-web/gemini_mcp.py"],
+      "env": {
+        "GEMINI_WS_HOST": "127.0.0.1",
+        "GEMINI_WS_PORT": "8765"
+      }
+    },
+    "deepseek-web": {
+      "command": "python",
+      "args": ["mcp-deepseek-web/deepseek_mcp.py"],
+      "env": {
+        "DEEPSEEK_WS_HOST": "127.0.0.1",
+        "DEEPSEEK_WS_PORT": "8766"
+      }
+    },
+    "ia-local": {
+      "command": "python",
+      "args": ["-m", "mcp_qwen_coder.server"],
+      "env": {
+        "MCP_SHELL": "auto"
+      }
+    },
+    "qwen-controller": {
+      "command": "python",
+      "args": ["mcp-qwen-controller/qwen_mcp.py"],
+      "env": {
+        "QWEN_CDP_HOST": "127.0.0.1",
+        "QWEN_CDP_PORT": "9222"
+      }
+    }
+  }
+}

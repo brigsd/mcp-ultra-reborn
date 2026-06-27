@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gemini-web": {
+      "command": "python",
+      "args": ["gemini_mcp.py"],
+      "env": {
+        "GEMINI_WS_HOST": "127.0.0.1",
+        "GEMINI_WS_PORT": "8765"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "deepseek-web": {
+      "command": "python",
+      "args": ["deepseek_mcp.py"],
+      "env": {
+        "DEEPSEEK_WS_HOST": "127.0.0.1",
+        "DEEPSEEK_WS_PORT": "8766"
+      }
+    }
+  }
+}

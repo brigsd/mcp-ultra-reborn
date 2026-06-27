@@ -1,0 +1,6 @@
+# Instala a colecao inteira no mesmo ambiente (o .venv da raiz).
+# Cada subpasta tambem tem o seu proprio requirements, se voce preferir separar.
+-r mcp-gemini-web/requirements.txt
+-r mcp-deepseek-web/requirements.txt
+-r mcp-qwen-controller/requirements.txt
+-e ./mcp-qwen-coder
