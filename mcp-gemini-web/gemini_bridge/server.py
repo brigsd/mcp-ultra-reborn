@@ -6,6 +6,8 @@ Ferramentas:
 - selecionar_modelo_gemini : escolhe modelo + nivel de raciocinio.
 - configurar_gemini        : abre chat novo e fixa a 1a mensagem (system prompt).
 - consultar_gemini         : chamada "API" - edita a 2a mensagem e le a resposta.
+- listar_conversas_gemini  : lista as conversas recentes da barra (titulo + id).
+- abrir_conversa_gemini    : abre uma conversa pelo id e devolve a URL aberta.
 """
 
 import os
@@ -167,5 +169,42 @@ def build_server():
         if bridge is None:
             raise RuntimeError("Bridge nao iniciada.")
         return await bridge.send_cmd("consultar", {"tarefa": tarefa}, timeout=timeout)
+
+    @mcp.tool()
+    async def listar_conversas_gemini() -> str:
+        """Lista as conversas recentes da barra lateral do Gemini.
+
+        Devolve um JSON: [{"id": "<id>", "titulo": "<titulo>"}, ...]. O `id` e o
+        identificador estavel da conversa, o MESMO que aparece na URL
+        (gemini.google.com/app/<id>); guarde-o e use em `abrir_conversa_gemini`.
+
+        Abre a barra lateral sozinho se estiver fechada. A lista do Gemini e
+        virtualizada (scroll infinito), entao isto devolve as conversas
+        atualmente carregadas (as mais recentes), nao o historico inteiro.
+        Pressupoe a secao "Recentes" expandida. Retorno enxuto de proposito:
+        use isto, nao o `inspecionar_gemini` (que despeja o DOM e custa caro).
+        """
+        if bridge is None:
+            raise RuntimeError("Bridge nao iniciada.")
+        return await bridge.send_cmd("listar_conversas", {}, timeout=30)
+
+    @mcp.tool()
+    async def abrir_conversa_gemini(conversa_id: str) -> str:
+        """Abre uma conversa existente do Gemini pelo id e devolve a URL aberta.
+
+        `conversa_id` e o identificador da URL (gemini.google.com/app/<id>),
+        tambem retornado por `listar_conversas_gemini`. Pegue o id de la; nao
+        ha como abrir por titulo (buscar por texto no DOM derruba a extensao).
+
+        Garante a barra lateral aberta, clica no link da conversa e confirma
+        pela URL, que volta como recibo. Operacao barata: nao despeja DOM. Se o
+        id nao estiver na lista carregada (virtualizada), falha avisando; nesse
+        caso liste de novo ou role a barra.
+        """
+        if bridge is None:
+            raise RuntimeError("Bridge nao iniciada.")
+        return await bridge.send_cmd(
+            "abrir_conversa", {"conversa_id": conversa_id}, timeout=30
+        )
 
     return mcp

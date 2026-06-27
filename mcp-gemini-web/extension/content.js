@@ -17,7 +17,14 @@ const SEL = {
   menuItem: 'gem-menu-item',
   userMsg: 'user-query',
   editBtn: 'button[aria-label="Editar" i]',
-  editArea: 'textarea[aria-label="Editar pergunta" i], user-query textarea'
+  editArea: 'textarea[aria-label="Editar pergunta" i], user-query textarea',
+  // Barra lateral de conversas (calibrado jun/2026):
+  // - convLink: cada conversa recente. O href e /app/<id> e o <id> e estavel,
+  //   o mesmo que aparece na URL. Use o id como chave, nunca busca por texto.
+  // - openSidebar: reabre a barra quando esta fechada (so existe nesse estado).
+  //   Com a barra fechada os convLink somem do DOM, por isso abra antes.
+  openSidebar: 'chat-app-side-nav-menu-button button, button[aria-label="Abrir barra lateral" i]',
+  convLink: 'a.gem-nav-list-item[href^="/app/"]'
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -50,6 +57,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     selecionar_modelo: () => handleSelecionarModelo(msg.modelo, msg.raciocinio),
     configurar: () => handleConfigurar(msg),
     consultar: () => handleConsultar(msg.tarefa),
+    listar_conversas: () => handleListarConversas(),
+    abrir_conversa: () => handleAbrirConversa(msg.conversa_id),
     inspecionar: () => inspecionar(msg.seletor, msg.max),
   };
   const h = handlers[msg.type];
@@ -321,6 +330,62 @@ async function handleConsultar(tarefa) {
 
   const text = await esperarEdicao(textoAntigo);
   return await resolveComparison(text);
+}
+
+// ----------------------------------------------------------------------------
+// Gestao de conversas (barra lateral)
+//
+// Achados dos testes (jun/2026), registrados pra nao redescobrir:
+// - Cada conversa tem um id estavel que aparece na URL (/app/<id>) e no href do
+//   link na barra. O id e a chave duravel; nao depende do contexto da IA.
+// - Clicar no <a> da conversa navega de fato (a URL passa a /app/<id>).
+// - Com a barra FECHADA os links somem do DOM: e preciso abrir a barra antes
+//   (botao "Abrir barra lateral"). Aberta, os links voltam.
+// - A lista e virtualizada (scroll infinito): so as conversas carregadas estao
+//   no DOM. listar devolve as recentes carregadas, nao o historico inteiro.
+// - Buscar a conversa por TEXTO (via inspecionar) derrubou o content script;
+//   por isso aqui casamos por seletor CSS / href, nunca por texto.
+// ----------------------------------------------------------------------------
+
+async function garantirBarraAberta() {
+  if (q(SEL.convLink)) return;            // ja tem conversas no DOM -> aberta
+  const btn = q(SEL.openSidebar);
+  if (btn) btn.click();
+  for (let i = 0; i < 20; i++) {
+    await sleep(150);
+    if (q(SEL.convLink)) return;
+  }
+  throw new Error("Nao consegui abrir a barra lateral de conversas.");
+}
+
+const idDoHref = (href) => (href || "").split("/").pop();  // /app/<id> -> <id>
+
+async function handleListarConversas() {
+  await garantirBarraAberta();
+  const convs = qa(SEL.convLink).map((a) => ({
+    id: idDoHref(a.getAttribute("href")),
+    titulo: norm(a.getAttribute("aria-label") || a.innerText).trim() || "(sem titulo)",
+  }));
+  return JSON.stringify(convs);
+}
+
+async function handleAbrirConversa(id) {
+  if (!id) throw new Error("conversa_id vazio.");
+  await garantirBarraAberta();
+  const link = qa(SEL.convLink).find((a) => idDoHref(a.getAttribute("href")) === id);
+  if (!link) {
+    throw new Error(
+      `Conversa '${id}' nao esta na lista carregada. A lista e virtualizada: ` +
+      `role a barra, liste de novo, ou confira o id.`
+    );
+  }
+  link.removeAttribute("target");         // evita abrir em aba nova
+  link.click();
+  for (let i = 0; i < 40; i++) {
+    await sleep(150);
+    if (location.href.includes("/app/" + id)) return location.href;
+  }
+  throw new Error("Cliquei na conversa mas a URL nao mudou pro id esperado.");
 }
 
 // ----------------------------------------------------------------------------

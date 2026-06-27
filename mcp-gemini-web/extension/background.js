@@ -37,7 +37,7 @@ function connect() {
   };
 }
 
-const ACTIONS = ["ask", "configurar", "consultar", "selecionar_modelo", "inspecionar"];
+const ACTIONS = ["ask", "configurar", "consultar", "selecionar_modelo", "listar_conversas", "abrir_conversa", "inspecionar"];
 
 function send(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
@@ -56,6 +56,7 @@ async function runOnGemini(msg) {
     raciocinio: msg.raciocinio,
     seletor: msg.seletor,
     max: msg.max,
+    conversa_id: msg.conversa_id,
   };
   try {
     return await sendToTab(tab.id, payload);

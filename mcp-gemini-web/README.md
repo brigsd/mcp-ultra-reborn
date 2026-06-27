@@ -26,6 +26,8 @@ executa a ação no DOM e devolve o resultado, casado ao pedido por um identific
 | `selecionar_modelo_gemini(modelo, raciocinio)` | Escolhe o modelo (`flash-lite`, `flash`, `pro`) e, opcionalmente, o raciocínio (`padrao`, `estendido`). |
 | `configurar_gemini(config, modelo, raciocinio)` | Abre um chat novo, escolhe modelo/raciocínio e fixa a 1ª mensagem como configuração. |
 | `consultar_gemini(tarefa)` | Chamada estilo API: edita a 2ª mensagem e devolve a resposta regenerada. |
+| `listar_conversas_gemini()` | Lista as conversas recentes da barra lateral (título + id), em JSON. |
+| `abrir_conversa_gemini(conversa_id)` | Abre uma conversa pelo id e devolve a URL aberta. |
 | `inspecionar_gemini(seletor)` | Diagnóstico de DOM. Uso excepcional (ver abaixo). |
 
 ## O fluxo "API" (configurar + consultar)
@@ -43,6 +45,26 @@ cada chamada. Isso dá comportamento estável (a configuração é fixa) e chama
 independentes (sem histórico acumulado). A escolha de modelo e raciocínio cabe no
 `configurar_gemini` porque combina com o início do chat; `selecionar_modelo_gemini`
 também funciona avulso.
+
+## Gestão de conversas
+
+`listar_conversas_gemini` e `abrir_conversa_gemini` operam na barra lateral. A
+chave de tudo é o **id da conversa**, o trecho que aparece na URL
+(`gemini.google.com/app/<id>`): ele é estável e é o que você guarda para reabrir
+uma conversa depois, sem depender de nada que tenha ficado no contexto da IA.
+
+`listar` devolve um JSON enxuto de `{id, titulo}`; `abrir` recebe um id, clica no
+link e confirma pela URL que voltou. Os dois abrem a barra lateral sozinhos se
+ela estiver fechada (fechada, os links somem do DOM). Para mexer com conversas
+use estas ferramentas, não o `inspecionar_gemini`: o inspecionar despeja o DOM
+inteiro e custa caro, estas retornam só o essencial.
+
+Duas limitações conhecidas. A lista de Recentes é virtualizada (scroll infinito),
+então `listar` enxerga só as conversas já carregadas, as mais recentes, não o
+histórico inteiro. E `abrir` encontra a conversa por id no DOM; se ela não
+estiver no trecho carregado, falha avisando, e aí é rolar a barra ou listar de
+novo. A identificação é sempre por id ou seletor CSS, nunca por texto, porque
+buscar a conversa pelo título derrubou o content script nos testes.
 
 ## Rodar e instalar
 
