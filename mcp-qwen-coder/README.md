@@ -1,6 +1,6 @@
 # mcp-qwen-coder
 
-> Parte do repositório [mcp-ia-web](../README.md).
+> Parte do repositório [mcp-ultra-reborn](../README.md).
 
 Servidor **MCP (Model Context Protocol)** que dá a uma IA acesso ao seu
 **terminal local (CMD / PowerShell / bash)** e a torna capaz de agir como um
@@ -54,10 +54,10 @@ Configuração no Claude Desktop (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "ia-web": {
+    "ia-local": {
       "command": "python",
       "args": ["-m", "mcp_qwen_coder.server"],
-      "cwd": "C:/caminho/para/mcp-ia-web/mcp-qwen-coder/src",
+      "cwd": "C:/caminho/para/mcp-ultra-reborn/mcp-qwen-coder/src",
       "env": { "MCP_TRANSPORT": "stdio", "MCP_SHELL": "auto" }
     }
   }
@@ -67,7 +67,7 @@ Configuração no Claude Desktop (`claude_desktop_config.json`):
 No Claude Code:
 
 ```bash
-claude mcp add ia-web -- python -m mcp_qwen_coder.server
+claude mcp add ia-local -- python -m mcp_qwen_coder.server
 ```
 
 No **Qwen Chat (app desktop)** — adicione um servidor MCP do tipo **STDIO**.
@@ -79,7 +79,7 @@ e os parâmetros são `--from <caminho-do-projeto> mcp-qwen-coder`:
   "mcpServers": {
     "ia-local": {
       "command": "uvx",
-      "args": ["--from", "C:/Users/voce/mcp-ia-web/mcp-qwen-coder", "mcp-qwen-coder"],
+      "args": ["--from", "C:/Users/voce/mcp-ultra-reborn/mcp-qwen-coder", "mcp-qwen-coder"],
       "env": {
         "MCP_SHELL": "auto",
         "MCP_START_DIR": "C:/Users/voce/Desktop/qwen-sandbox",

@@ -1,4 +1,4 @@
-# mcp-ia-web
+# mcp-ultra-reborn
 
 Coleção de servidores **MCP (Model Context Protocol)** locais. Cada subpasta é um
 servidor independente, com o seu próprio `README.md`, e em conjunto eles formam um
@@ -134,7 +134,7 @@ objeto `SEL` no início do `qwen_bridge/driver.js`.
 ### 1. Instalar as dependências
 
 A raiz mantém um ambiente virtual compartilhado e um `requirements.txt` que reúne
-os três servidores, incluindo o `mcp-qwen-coder` como pacote editável:
+os quatro servidores, com o `mcp-qwen-coder` como pacote editável:
 
 ```bash
 python -m venv .venv

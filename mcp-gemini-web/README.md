@@ -1,6 +1,6 @@
 # mcp-gemini-web
 
-> Parte do repositório [mcp-ia-web](../README.md).
+> Parte do repositório [mcp-ultra-reborn](../README.md).
 
 Ponte entre um host MCP (ex.: Antigravity, Claude Code) e o **Gemini web**. O host
 chama uma ferramenta, a tarefa é enviada no Gemini, e a resposta volta. Uma

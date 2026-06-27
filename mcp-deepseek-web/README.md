@@ -1,6 +1,6 @@
 # mcp-deepseek-web
 
-> Parte do repositório [mcp-ia-web](../README.md). Gêmeo do
+> Parte do repositório [mcp-ultra-reborn](../README.md). Gêmeo do
 > [`mcp-gemini-web`](../mcp-gemini-web/), dirigindo o **DeepSeek**.
 
 Ponte entre um host MCP (ex.: Antigravity, Claude Code) e o **DeepSeek web**. O
