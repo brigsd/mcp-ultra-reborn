@@ -1,12 +1,12 @@
 {
   "mcpServers": {
     "gemini-web": {
-      "type": "http",
-      "url": "http://127.0.0.1:8775/mcp"
+      "command": "python",
+      "args": ["mcp-gemini-web/gemini_mcp.py"]
     },
     "deepseek-web": {
-      "type": "http",
-      "url": "http://127.0.0.1:8776/mcp"
+      "command": "python",
+      "args": ["mcp-deepseek-web/deepseek_mcp.py"]
     },
     "ia-local": {
       "command": "python",

@@ -13,21 +13,15 @@ Desktop via CDP.
 | `qwen-controller` | stdio | — | Controlar o Qwen Chat Desktop via CDP |
 | `ia-local` | stdio | — | Modelo local via Qwen Coder |
 
-## Iniciar os servidores HTTP (gemini-web e deepseek-web)
+## gemini-web e deepseek-web
 
-**Se `ToolSearch("gemini")` retornar vazio**, o servidor HTTP não está rodando.
-Inicie com o Bash tool:
+Os servidores rodam em modo stdio — o Claude Code os inicia automaticamente ao
+abrir o projeto. Nenhuma ação manual necessária.
 
-```bash
-powershell -ExecutionPolicy Bypass -File scripts/start-http.ps1 &
-```
-
-Aguarde ~3 segundos e tente de novo. Os servidores ficam nas portas 8775 (Gemini)
-e 8776 (DeepSeek) e sobrevivem a reloads do Claude Code.
-
-A extensão do Chrome também precisa estar conectada. Verifique com
-`gemini_status()` — deve retornar `conectada`. Se retornar `desconectada`, a aba
-do Gemini não está aberta ou a extensão não está carregada.
+A extensão do Chrome precisa estar conectada. Verifique com `gemini_status()` —
+deve retornar `conectada`. Se retornar `desconectada`, a aba do Gemini não está
+aberta ou a extensão não está carregada. A extensão reconecta automaticamente
+em ~2 segundos se o servidor reiniciar.
 
 ## Fluxo para processar documentos sem gastar tokens
 
