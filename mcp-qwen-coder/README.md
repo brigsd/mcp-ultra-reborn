@@ -28,6 +28,13 @@ então a IA pode navegar pelo sistema, rodar builds, scripts, git, etc.
 | `write_file` | Cria ou sobrescreve um arquivo |
 | `edit_file` | Substituição exata de trecho num arquivo (find-and-replace) |
 | `get_system_info` | SO, shell, usuário, cwd, config de segurança |
+| `grep_search` | Busca padrão (texto/regex) em todos os arquivos de uma árvore |
+| `find_files` | Localiza arquivos por nome/extensão via glob recursivo |
+| `read_file_lines` | Lê trecho de um arquivo por intervalo de linhas (paginado) |
+| `index_codebase` | Mapeia a estrutura do projeto + extrai símbolos de código |
+| `create_plan` | Cria um plano de execução com passos rastreáveis |
+| `update_plan` | Atualiza o status de um passo de um plano |
+| `get_plan` | Mostra um plano ou lista todos os existentes |
 
 ## Instalação
 
