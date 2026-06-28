@@ -104,6 +104,47 @@ async def _lifespan(_server):
     yield {}
 
 
+def _salvar_imagem_local(url: str, pasta_key: str | None) -> str:
+    import datetime
+    import sys
+    import urllib.request
+    import uuid
+
+    repo_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    subpasta = "uso-geral"
+    if pasta_key and pasta_key.strip().lower() == "referencia_3d":
+        subpasta = "referencia_3d"
+
+    destino_dir = os.path.join(
+        repo_root, "mcp-gemini-web", "imagens", subpasta
+    )
+    os.makedirs(destino_dir, exist_ok=True)
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    uuid_str = uuid.uuid4().hex[:6]
+    filename = f"img_{timestamp}_{uuid_str}.png"
+    filepath = os.path.join(destino_dir, filename)
+
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                )
+            },
+        )
+        with urllib.request.urlopen(req, timeout=30) as response:
+            with open(filepath, "wb") as f:
+                f.write(response.read())
+        return filepath
+    except Exception as e:
+        print(f"[gemini-web] Erro ao baixar imagem: {e}", file=sys.stderr)
+        return f"Erro ao baixar: {e}"
+
+
 def build_server():
     # host/port usados so no transporte HTTP (streamable-http); no stdio sao ignorados.
     http_host = os.environ.get("GEMINI_HTTP_HOST", "127.0.0.1")
@@ -168,9 +209,12 @@ def build_server():
 
     @mcp.tool()
     async def gerar_imagem_gemini(
-        prompt: str, imagem_precisa: bool | None = None, timeout: int = 180
+        prompt: str,
+        pasta_destino: str = "uso-geral",
+        imagem_precisa: bool | None = None,
+        timeout: int = 180,
     ) -> str:
-        """Pede ao Gemini para gerar uma imagem a partir de um prompt.
+        """Pede ao Gemini para gerar uma imagem a partir de um prompt e a salva localmente.
 
         Caso `imagem_precisa` seja True, a ferramenta ativa a opcao 'Criar imagem'
         no menu do Gemini e liga o raciocinio estendido. Se False, desativa ambos.
@@ -179,17 +223,30 @@ def build_server():
 
         Args:
             prompt: a descricao da imagem que voce quer gerar.
+            pasta_destino: 'uso-geral' (padrao) ou 'referencia_3d' para escolher a pasta de destino local.
             imagem_precisa: True (padrao) para ativar imagem precisa e raciocinio estendido, False caso contrario.
             timeout: segundos a aguardar o retorno (padrao 180).
         """
-        # Se for None, o default e True (ativar ambos)
         habilitar = True if imagem_precisa is None else bool(imagem_precisa)
         b = await ensure_bridge()
-        return await b.send_cmd(
+        resp_text = await b.send_cmd(
             "gerar_imagem",
             {"prompt": prompt, "imagem_precisa": habilitar},
             timeout=timeout,
         )
+
+        # Extrai as URLs e faz o download local
+        urls = re.findall(r"-\s+(https?://\S+)", resp_text)
+        if urls:
+            caminhos = []
+            for url in urls:
+                caminho = _salvar_imagem_local(url, pasta_destino)
+                caminhos.append(caminho)
+            resp_text += "\n\n[Salvo Localmente]:\n" + "\n".join(
+                f"- {c}" for c in caminhos
+            )
+
+        return resp_text
 
 
     @mcp.tool()
