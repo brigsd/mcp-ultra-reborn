@@ -17,7 +17,7 @@ for col in list(bpy.data.collections):
     bpy.data.collections.remove(col)
 
 try:
-    params = json.loads('{"profundidade": 3, "raio_tronco": 0.12}')
+    params = json.loads('{}')
 
     if "arvore_lowpoly" == "assembler":
         from assembler import montar_sistema_freio
