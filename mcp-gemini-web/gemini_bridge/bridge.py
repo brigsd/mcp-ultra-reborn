@@ -7,9 +7,34 @@ a tool e chamada, o MCP manda a tarefa pela conexao e espera (long-poll) o
 
 import asyncio
 import json
+import subprocess
+import sys
 import uuid
 
 import websockets
+
+
+def _liberar_porta(port: int) -> None:
+    """Mata qualquer processo segurando a porta TCP localmente."""
+    try:
+        if sys.platform == "win32":
+            r = subprocess.run(
+                ["netstat", "-ano"], capture_output=True, text=True
+            )
+            for line in r.stdout.splitlines():
+                if f":{port} " in line and "LISTENING" in line:
+                    pid = line.split()[-1]
+                    subprocess.run(
+                        ["taskkill", "/F", "/PID", pid],
+                        capture_output=True,
+                    )
+        else:
+            subprocess.run(
+                ["fuser", "-k", f"{port}/tcp"],
+                capture_output=True,
+            )
+    except Exception:
+        pass
 
 
 class Bridge:
@@ -21,7 +46,14 @@ class Bridge:
         self._pending = {}           # id -> Future
 
     async def start(self):
-        self._server = await websockets.serve(self._handler, self.host, self.port)
+        try:
+            self._server = await websockets.serve(self._handler, self.host, self.port)
+        except OSError:
+            # Porta ocupada por processo anterior (ex.: servidor HTTP de sessao antiga).
+            # Libera e tenta de novo uma vez.
+            _liberar_porta(self.port)
+            await asyncio.sleep(0.5)
+            self._server = await websockets.serve(self._handler, self.host, self.port)
 
     async def stop(self):
         if self._server:
