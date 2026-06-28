@@ -1,130 +1,145 @@
-import bpy
+"""
+Árvore Low Poly — gerador usando esqueleto + modificador Skin do Blender.
+
+Técnica: constrói um esqueleto de vértices+arestas, aplica o modificador Skin
+(que costura uma pele contínua ao redor das arestas), congela via depsgraph
+e adiciona folhagem icosférica nas pontas. Roda 100% headless e via bridge GUI.
+
+Baseado em prototype/arvore_skin.py (validado).
+"""
+
+import os
 import math
-import mathutils
-from api.validators import validar_objeto, relatorio_para_texto
+import bpy
+import numpy as np
 
-# Parâmetros de proporção da árvore
-TAPER = 0.7        # Razão de raio (pai -> filho)
-ENCURTA = 0.75     # Razão de comprimento (pai -> filho)
-ABRE = math.radians(35) # Ângulo de inclinação para fora
-OURO = math.radians(137.5) # Ângulo de rotação de Fibonacci
+OURO = math.radians(137.5)
+TAPER, ENCURTA, ABRE = 0.72, 0.74, math.radians(34)
 
-def criar_cilindro_simples(base, topo, raio_base, raio_topo, lados=5, nome="Galho"):
-    mesh = bpy.data.meshes.new(nome)
-    obj = bpy.data.objects.new(nome, mesh)
+
+def _perp(d):
+    a = np.array([0, 0, 1.0]) if abs(d[2]) < 0.9 else np.array([1.0, 0, 0])
+    p = np.cross(d, a)
+    return p / np.linalg.norm(p)
+
+
+def _rot(v, eixo, ang):
+    eixo = eixo / np.linalg.norm(eixo)
+    return (v * math.cos(ang) + np.cross(eixo, v) * math.sin(ang)
+            + eixo * np.dot(eixo, v) * (1 - math.cos(ang)))
+
+
+def _dir_galho(d, radial):
+    p = _rot(_perp(d), d, radial)
+    nd = d * math.cos(ABRE) + p * math.sin(ABRE)
+    return nd / np.linalg.norm(nd)
+
+
+def _construir_esqueleto(profundidade, galhos, raio_tronco):
+    pos, raio_vert, arestas, folhas = [], [], [], []
+
+    base = np.array([0, 0, 0.0])
+    i_raiz = 0
+    pos.append(base)
+    raio_vert.append(raio_tronco)
+
+    def crescer(i_base, d, comp, raio, prof):
+        tip = pos[i_base] + d * comp
+        i_tip = len(pos)
+        pos.append(tip)
+        raio_vert.append(raio * TAPER)
+        arestas.append((i_base, i_tip))
+        if prof <= 0:
+            folhas.append((tip, comp))
+            return
+        for k in range(galhos):
+            nd = _dir_galho(d, OURO * k + prof)
+            crescer(i_tip, nd, comp * ENCURTA, raio * TAPER, prof - 1)
+
+    crescer(i_raiz, np.array([0, 0, 1.0]), 1.0, raio_tronco, profundidade)
+    return pos, raio_vert, arestas, i_raiz, folhas
+
+
+def _malha_esqueleto(pos, arestas, nome):
+    me = bpy.data.meshes.new(nome)
+    verts = [tuple(float(c) for c in p) for p in pos]
+    me.from_pydata(verts, [tuple(int(i) for i in a) for a in arestas], [])
+    me.update()
+    obj = bpy.data.objects.new(nome, me)
     bpy.context.collection.objects.link(obj)
-    
-    import bmesh
-    bm = bmesh.new()
-    
-    dir_vec = topo - base
-    comprimento = dir_vec.length
-    dir_vec.normalize()
-    
-    up = mathutils.Vector((0, 0, 1))
-    rot = up.rotation_difference(dir_vec)
-    
-    verts_base = []
-    verts_topo = []
-    for i in range(lados):
-        ang = i * (2 * math.pi / lados)
-        x = math.cos(ang)
-        y = math.sin(ang)
-        
-        # Rotaciona e translada
-        v_b = rot @ mathutils.Vector((x * raio_base, y * raio_base, 0)) + base
-        v_t = rot @ mathutils.Vector((x * raio_topo, y * raio_topo, comprimento)) + base
-        
-        verts_base.append(bm.verts.new(v_b))
-        verts_topo.append(bm.verts.new(v_t))
-        
-    for i in range(lados):
-        next_i = (i + 1) % lados
-        bm.faces.new((verts_base[i], verts_base[next_i], verts_topo[next_i], verts_topo[i]))
-        
-    bm.faces.new(verts_base)
-    bm.faces.new(verts_topo)
-    
-    bm.to_mesh(mesh)
-    bm.free()
     return obj
 
-def criar_folhagem(pos, raio, nome="Folha"):
-    mesh = bpy.data.meshes.new(nome)
-    obj = bpy.data.objects.new(nome, mesh)
-    bpy.context.collection.objects.link(obj)
-    
-    import bmesh
-    bm = bmesh.new()
-    bmesh.ops.create_icosphere(bm, subdivisions=1, radius=raio)
-    
-    for v in bm.verts:
-        v.co += pos
-        
-    bm.to_mesh(mesh)
-    bm.free()
-    return obj
 
-def _crescer_galhos(base, dir_vec, comp, raio, prof, max_prof, objects):
-    topo = base + dir_vec * comp
-    
-    raio_topo = raio * TAPER
-    galho = criar_cilindro_simples(base, topo, raio, raio_topo, lados=5)
-    objects.append(galho)
-    
-    if prof >= max_prof:
-        folha = criar_folhagem(topo, comp * 1.5)
-        objects.append(folha)
-        return
-        
-    # Eixos perpendiculares para rotação
-    up = mathutils.Vector((0, 0, 1))
-    if abs(dir_vec.z) < 0.9:
-        perp = dir_vec.cross(up).normalized()
-    else:
-        perp = dir_vec.cross(mathutils.Vector((1, 0, 0))).normalized()
-        
-    for i in range(2):
-        ang_radial = i * OURO + prof
-        dir_rot = dir_vec.copy()
-        
-        # Inclina o galho para fora
-        m_inclina = mathutils.Matrix.Rotation(ABRE, 4, perp)
-        dir_rot = m_inclina @ dir_rot
-        
-        # Rotaciona ao redor do galho pai
-        m_radial = mathutils.Matrix.Rotation(ang_radial, 4, dir_vec)
-        dir_rot = m_radial @ dir_rot
-        dir_rot.normalize()
-        
-        _crescer_galhos(topo, dir_rot, comp * ENCURTA, raio_topo, prof + 1, max_prof, objects)
+def _aplicar_skin(obj, raio_vert, i_raiz):
+    me = obj.data
+    skin = obj.modifiers.new(name="Skin", type="SKIN")
+    sv = me.skin_vertices[0].data
+    for i, r in enumerate(raio_vert):
+        sv[i].radius = (r, r)
+    for i in range(len(sv)):
+        sv[i].use_root = (i == i_raiz)
+    skin.branch_smoothing = 0.0
+    skin.use_smooth_shade = False
+    me.update()
 
-def gerar(profundidade=4, raio_tronco=0.15, nome="ArvoreLowPoly"):
-    objects = []
-    _crescer_galhos(
-        base=mathutils.Vector((0, 0, 0)),
-        dir_vec=mathutils.Vector((0, 0, 1)),
-        comp=1.2,
-        raio=raio_tronco,
-        prof=1,
-        max_prof=profundidade,
-        objects=objects
+
+def _congelar(obj):
+    deps = bpy.context.evaluated_depsgraph_get()
+    me_eval = bpy.data.meshes.new_from_object(obj.evaluated_get(deps))
+    obj.data = me_eval
+    obj.modifiers.clear()
+
+
+def gerar(profundidade=4, galhos=2, raio_tronco=0.10, com_folhagem=True, nome="ArvoreLowPoly"):
+    """
+    Gera uma árvore low-poly usando o modificador Skin do Blender.
+
+    Args:
+        profundidade: Níveis de recursão (4 = denso, 3 = médio, 2 = simples)
+        galhos: Número de galhos por nó (2 = binária, 3 = tripla)
+        raio_tronco: Espessura do tronco principal em metros
+        com_folhagem: Se True, adiciona icoesferas baixas nas pontas dos galhos
+        nome: Nome do objeto principal na cena
+
+    Returns:
+        Objeto Blender da árvore (tronco + galhos como malha única)
+    """
+    pos, raio_vert, arestas, i_raiz, folhas = _construir_esqueleto(
+        profundidade, galhos, raio_tronco
     )
-    
-    # Faz o Join de todas as partes em um único objeto mesh
-    bpy.ops.object.select_all(action='DESELECT')
-    for obj in objects:
-        obj.select_set(True)
-        
-    bpy.context.view_layer.objects.active = objects[0]
-    bpy.ops.object.join()
-    
-    arvore = objects[0]
-    arvore.name = nome
+
+    arvore = _malha_esqueleto(pos, arestas, nome)
+    _aplicar_skin(arvore, raio_vert, i_raiz)
+    _congelar(arvore)
+
+    if com_folhagem:
+        for tip, comp in folhas:
+            bpy.ops.mesh.primitive_ico_sphere_add(
+                subdivisions=1, radius=comp * 1.6,
+                location=(float(tip[0]), float(tip[1]), float(tip[2]))
+            )
+
     return arvore
 
-def gerar_e_validar(profundidade=4, raio_tronco=0.15):
-    obj = gerar(profundidade=profundidade, raio_tronco=raio_tronco)
-    rel = validar_objeto(obj)
-    txt = relatorio_para_texto(rel)
-    return obj, txt
+
+def gerar_e_validar(profundidade=4, galhos=2, raio_tronco=0.10, com_folhagem=True):
+    """
+    Gera a árvore e retorna o objeto e um relatório textual.
+    Interface padrão requerida pelo gerar_modelo_3d do servidor MCP.
+    """
+    obj = gerar(profundidade=profundidade, galhos=galhos,
+                 raio_tronco=raio_tronco, com_folhagem=com_folhagem)
+
+    total_faces = sum(len(o.data.polygons) for o in bpy.data.objects if o.type == "MESH")
+    total_verts = sum(len(o.data.vertices) for o in bpy.data.objects if o.type == "MESH")
+    n_folhas = sum(1 for o in bpy.data.objects if o.type == "MESH" and o != obj)
+
+    relatorio = (
+        f"ArvoreLowPoly OK\n"
+        f"  profundidade={profundidade}  galhos={galhos}  raio_tronco={raio_tronco}\n"
+        f"  tronco+galhos: {len(obj.data.polygons)} faces\n"
+        f"  folhagens: {n_folhas} esferas\n"
+        f"  total na cena: {total_verts} vértices / {total_faces} faces"
+    )
+
+    return obj, relatorio

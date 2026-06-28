@@ -259,12 +259,18 @@ except Exception as e:
     path_stl = str(pasta_imagens / "temp_output.stl")
     os.close(fd_script)
     
+    # Monta o script headless usando importlib para carregar o arquivo diretamente por caminho
+    # (evita problemas de resolução de módulo em Blender headless)
+    part_file_path = str(ROOT / "parts" / f"{part_name}.py").replace("\\", "/")
+    params_json_str = json.dumps(params)
+
     script_headless = f"""
 import sys
 import os
 import bpy
 import json
 import traceback
+import importlib.util
 
 ROOT = r"{str(ROOT).replace('\\', '/')}"
 if ROOT not in sys.path:
@@ -277,14 +283,18 @@ for col in list(bpy.data.collections):
     bpy.data.collections.remove(col)
 
 try:
+    params = json.loads({repr(params_json_str)})
+
     if "{part_name}" == "assembler":
         from assembler import montar_sistema_freio
         montar_sistema_freio()
     else:
-        from parts.{part_name} import gerar_e_validar
-        params = json.loads({repr(json.dumps(params))})
-        obj, rel_texto = gerar_e_validar(**params)
-        
+        # Carrega o arquivo do gerador diretamente por caminho (robusto em headless)
+        spec = importlib.util.spec_from_file_location("_gerador", r"{part_file_path}")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        obj, rel_texto = mod.gerar_e_validar(**params)
+
     # Exportar para STL
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.wm.stl_export(filepath={repr(path_stl)}, export_selected_objects=True, apply_modifiers=True)
@@ -302,7 +312,7 @@ except Exception as e:
         os.close(fd_gen_log)
         
         with open(path_gen_log, "w", encoding="utf-8") as f_log:
-            proc_gen = subprocess.run([blender_path, "--background", "--python", path_script], stdout=f_log, stderr=f_log, timeout=90)
+            proc_gen = subprocess.run([blender_path, "--background", "--python", path_script], stdout=f_log, stderr=f_log, timeout=180)
             
         gen_output = Path(path_gen_log).read_text(encoding="utf-8", errors="ignore")
         if os.path.exists(path_gen_log):
@@ -324,7 +334,7 @@ except Exception as e:
         os.close(fd_render_log)
         
         with open(path_render_log, "w", encoding="utf-8") as f_log:
-            proc_render = subprocess.run([blender_path, "--background", "--python", str(render_script), "--", path_stl], stdout=f_log, stderr=f_log, timeout=90)
+            proc_render = subprocess.run([blender_path, "--background", "--python", str(render_script), "--", path_stl], stdout=f_log, stderr=f_log, timeout=180)
             
         render_output = Path(path_render_log).read_text(encoding="utf-8", errors="ignore")
         if os.path.exists(path_render_log):
