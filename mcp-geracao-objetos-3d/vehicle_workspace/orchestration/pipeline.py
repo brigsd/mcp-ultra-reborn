@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 from vehicle_workspace.generators.blockout import generate_blockout
+from vehicle_workspace.generators.body_loft import generate_model
 from vehicle_workspace.generators.rig import generate_rig
 from vehicle_workspace.rendering.orthographic_views import render_views
 from vehicle_workspace.validation.dimensions import audit_dimensions
@@ -54,9 +55,15 @@ def run_vehicle_action(action, spec_json, output_dir, quality="draft"):
     generation = {}
     if action == "rig":
         generation["rig"] = generate_rig(spec)
-    elif action in {"blockout", "model"}:
+    elif action == "blockout":
         generation["rig"] = generate_rig(spec)
         generation["blockout"] = generate_blockout(spec)
+    elif action == "model":
+        if quality in {"standard", "high"}:
+            generation["model"] = generate_model(spec)
+        else:
+            generation["rig"] = generate_rig(spec)
+            generation["blockout"] = generate_blockout(spec)
     else:
         raise ValueError(f"Acao de veiculo desconhecida: {action}")
 
