@@ -22,7 +22,9 @@ executa a ação no DOM e devolve o resultado, casado ao pedido por um identific
 | Ferramenta | Quando usar |
 |---|---|
 | `gemini_status()` | **Sempre primeiro.** Confirma se a extensão está `conectada` antes de qualquer outra chamada. |
+| `reconectar_gemini(ambos)` | Inicia o Chrome com a extensão do gemini-web carregada e abre a aba automaticamente. |
 | `pergunta_gemini(tarefa)` | Tarefa avulsa sem contexto fixo. Uma chamada, uma resposta. |
+| `gerar_imagem_gemini(prompt, pasta_destino, imagem_precisa)` | Pede ao Gemini para gerar uma imagem a partir de um prompt e a salva localmente (em `uso-geral` ou `referencia_3d`). |
 | `configurar_gemini(config, modelo, raciocinio)` | Inicia sessão estilo API: abre chat novo e fixa o system prompt. Chame antes de `consultar_gemini`. |
 | `consultar_gemini(tarefa)` | Chamada dentro de sessão configurada: edita a 2ª mensagem e regenera. Requer `configurar_gemini` antes. |
 | `selecionar_modelo_gemini(modelo, raciocinio)` | Troca o modelo no meio de uma sessão. Se estiver abrindo chat novo, prefira passar o modelo no `configurar_gemini`. |

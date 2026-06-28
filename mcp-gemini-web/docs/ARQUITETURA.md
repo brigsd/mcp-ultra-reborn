@@ -81,7 +81,7 @@ pra colapsar numa resposta unica e destravar, e entao le o texto consolidado.
 
 ### Protocolo de acoes e o fluxo "API"
 O protocolo cresceu de uma acao (`ask`) para varias (`configurar`, `consultar`,
-`selecionar_modelo`, `inspecionar`), todas casadas por id via `Bridge.send_cmd`.
+`selecionar_modelo`, `inspecionar`, `gerar_imagem`), todas casadas por id via `Bridge.send_cmd`.
 Sobre isso se monta o fluxo que transforma o chat num endpoint com prompt de sistema
 fixo:
 
@@ -91,6 +91,7 @@ fixo:
 - **`consultar_gemini`** faz cada chamada **editando a 2a mensagem**: cria na 1a vez
   e reescreve nas seguintes. Como editar regenera a resposta e descarta os turnos
   seguintes, o contexto fica em *config + pergunta atual* e nao cresce.
+- **`gerar_imagem_gemini`** realiza o download e conversao hibrida (blobs locais em memory e URLs externas por background fetch anonimo) das imagens geradas na resposta, salvando-as localmente.
 
 A leitura da resposta editada e **ancorada ao turno editado** (o `model-response`
 apos o ultimo `user-query`), nao a "ultima resposta da pagina", pra nao pegar a
@@ -108,7 +109,7 @@ Descreve o DOM real (elementos, atributos, custom elements) e existe **so pra
 calibrar seletores** quando a UI muda; suporta sequencia de clique (`A >>> B`) pra
 abrir menus. Nao e usado na operacao normal — uso raro, por excecao.
 
-### Efemero por design
+## Efemero por design
 O servidor nao guarda nada em disco: pedidos pendentes vivem so na memoria, e o
 ciclo de vida e do host (sobe/derruba junto). A extensao reconecta sozinha quando
 o servidor volta.
@@ -121,9 +122,10 @@ gemini_bridge/
   server.py                # wiring FastMCP: tools + lifespan que sobe/derruba a Bridge
   bridge.py                # servidor WebSocket, registro de Futures por id, heartbeat
 extension/
-  manifest.json            # MV3: permissoes scripting/tabs/alarms, host gemini.google.com
-  background.js            # cliente WebSocket, roteamento pra aba, keepalive, auto-injecao
-  content.js               # dirige o DOM: envio, modelo, fluxo API (config/edicao), inspetor
+  manifest.json            # MV3: permissoes, host gemini.google.com e googleusercontent.com
+  background.js            # cliente WebSocket, roteamento, keepalive, bypass de CORS
+  content.js               # dirige o DOM: fluxo API, blobs
+imagens/                   # pasta local onde as imagens sao salvas (uso-geral/ e referencia_3d/)
 testar.py                  # teste isolado da ponte+extensao, sem host
 .mcp.json                  # registro do MCP no host
 ```
