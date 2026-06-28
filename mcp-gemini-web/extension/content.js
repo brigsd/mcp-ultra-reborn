@@ -60,6 +60,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     listar_conversas: () => handleListarConversas(),
     abrir_conversa: () => handleAbrirConversa(msg.conversa_id),
     inspecionar: () => inspecionar(msg.seletor, msg.max),
+    gerar_imagem: () => handleGerarImagem(msg.prompt, msg.imagem_precisa),
   };
   const h = handlers[msg.type];
   if (!h) {
@@ -214,6 +215,64 @@ async function handleAsk(prompt) {
 
   const text = await esperarNova(antes);
   return await resolveComparison(text);
+}
+
+// ----------------------------------------------------------------------------
+// Geração de imagem
+// ----------------------------------------------------------------------------
+
+async function configurarCriarImagem(habilitar) {
+  const menuBtn = q('button[aria-label="Envio e ferramentas"]');
+  if (!menuBtn) throw new Error("Botao 'Envio e ferramentas' nao encontrado.");
+  menuBtn.click();
+  
+  let targetBtn = null;
+  for (let i = 0; i < 20; i++) {
+    await sleep(150);
+    const items = qa('button, [role="menuitemcheckbox"]');
+    targetBtn = items.find((el) => /criar imagem/i.test(el.innerText || ""));
+    if (targetBtn) break;
+  }
+  
+  if (!targetBtn) {
+    fecharMenu();
+    throw new Error("Opcao 'Criar imagem' nao encontrada no menu de ferramentas.");
+  }
+  
+  const isChecked = targetBtn.getAttribute("aria-checked") === "true";
+  
+  if (habilitar && !isChecked) {
+    targetBtn.click();
+    await sleep(400);
+  } else if (!habilitar && isChecked) {
+    targetBtn.click();
+    await sleep(400);
+  } else {
+    fecharMenu();
+    await sleep(200);
+  }
+}
+
+async function handleGerarImagem(prompt, imagemPrecisa) {
+  // Se for nulo/undefined, o padrao e true
+  const habilitar = (imagemPrecisa === undefined || imagemPrecisa === null) ? true : !!imagemPrecisa;
+
+  // 1. Configurar opcao "Criar imagem"
+  await configurarCriarImagem(habilitar);
+  await sleep(300);
+
+  // 2. Configurar modo raciocinio
+  const picker = q(SEL.modePicker);
+  const currentText = picker ? (picker.innerText || "").toLowerCase() : "";
+  const targetRac = habilitar ? "estendido" : "padrão";
+  
+  if (!currentText.includes(targetRac)) {
+    await handleSelecionarModelo(null, habilitar ? "Estendido" : "Padrão");
+    await sleep(300);
+  }
+
+  // 3. Enviar prompt
+  return await handleAsk(prompt);
 }
 
 // ----------------------------------------------------------------------------

@@ -167,6 +167,32 @@ def build_server():
         return await b.ask(tarefa, timeout=timeout)
 
     @mcp.tool()
+    async def gerar_imagem_gemini(
+        prompt: str, imagem_precisa: bool | None = None, timeout: int = 180
+    ) -> str:
+        """Pede ao Gemini para gerar uma imagem a partir de um prompt.
+
+        Caso `imagem_precisa` seja True, a ferramenta ativa a opcao 'Criar imagem'
+        no menu do Gemini e liga o raciocinio estendido. Se False, desativa ambos.
+        Se None (nao informado), o padrao e ativar a opcao de imagem e o
+        raciocinio estendido em paralelo.
+
+        Args:
+            prompt: a descricao da imagem que voce quer gerar.
+            imagem_precisa: True (padrao) para ativar imagem precisa e raciocinio estendido, False caso contrario.
+            timeout: segundos a aguardar o retorno (padrao 180).
+        """
+        # Se for None, o default e True (ativar ambos)
+        habilitar = True if imagem_precisa is None else bool(imagem_precisa)
+        b = await ensure_bridge()
+        return await b.send_cmd(
+            "gerar_imagem",
+            {"prompt": prompt, "imagem_precisa": habilitar},
+            timeout=timeout,
+        )
+
+
+    @mcp.tool()
     async def selecionar_modelo_gemini(
         modelo: str, raciocinio: str | None = None
     ) -> str:
