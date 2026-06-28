@@ -399,5 +399,214 @@ except Exception as e:
         }, indent=2)
 
 
+def _blender_executable() -> str:
+    blender_path = r"C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe"
+    if not os.path.exists(blender_path):
+        import shutil
+        blender_path = shutil.which("blender") or "blender"
+    return blender_path
+
+
+def _run_vehicle_headless(action: str, spec_json: str, qualidade: str = "draft") -> str:
+    import tempfile
+    import time
+    import uuid
+
+    run_id = f"{action}_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    output_root = Path(os.environ.get("VEHICLE_OUTPUT_ROOT", r"C:\tmp\mcp-ultra-vehicle-runs"))
+    output_dir = output_root / run_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "renders").mkdir(parents=True, exist_ok=True)
+
+    fd_script, path_script = tempfile.mkstemp(suffix="_vehicle_run.py", text=True)
+    os.close(fd_script)
+
+    script = f"""
+import json
+import sys
+import traceback
+
+ROOT = r"{str(ROOT).replace('\\', '/')}"
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+try:
+    from vehicle_workspace.orchestration.pipeline import run_vehicle_action
+    report = run_vehicle_action(
+        action={action!r},
+        spec_json={spec_json!r},
+        output_dir={str(output_dir).replace('\\', '/')!r},
+        quality={qualidade!r},
+    )
+    print("VEHICLE_JSON_START")
+    print(json.dumps(report, ensure_ascii=False))
+    print("VEHICLE_JSON_END")
+except Exception as exc:
+    print("VEHICLE_JSON_START")
+    print(json.dumps({{
+        "success": False,
+        "error": str(exc),
+        "traceback": traceback.format_exc(),
+        "paths": {{"output_dir": {str(output_dir).replace('\\', '/')!r}}}
+    }}, ensure_ascii=False))
+    print("VEHICLE_JSON_END")
+"""
+
+    try:
+        Path(path_script).write_text(script, encoding="utf-8")
+        proc = subprocess.Popen(
+            [_blender_executable(), "--background", "--python", path_script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        try:
+            output_bytes, _ = proc.communicate(timeout=240)
+            output = output_bytes.decode("utf-8", errors="ignore")
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            return json.dumps({
+                "success": False,
+                "error": "Timeout na geracao headless de veiculo (>240s)",
+                "paths": {"output_dir": str(output_dir)}
+            }, indent=2, ensure_ascii=False)
+    finally:
+        if os.path.exists(path_script):
+            os.unlink(path_script)
+
+    start = output.find("VEHICLE_JSON_START")
+    end = output.find("VEHICLE_JSON_END")
+    if start == -1 or end == -1:
+        return json.dumps({
+            "success": False,
+            "error": "Blender nao retornou marcador VEHICLE_JSON.",
+            "blender_log": output[-6000:],
+            "paths": {"output_dir": str(output_dir)}
+        }, indent=2, ensure_ascii=False)
+
+    payload = output[start + len("VEHICLE_JSON_START"):end].strip()
+    try:
+        parsed = json.loads(payload)
+        return json.dumps(parsed, indent=2, ensure_ascii=False)
+    except Exception:
+        return json.dumps({
+            "success": False,
+            "error": "Falha ao parsear JSON retornado pelo runner de veiculo.",
+            "raw": payload,
+            "blender_log": output[-6000:],
+            "paths": {"output_dir": str(output_dir)}
+        }, indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
+async def vehicle_listar_arquetipos() -> str:
+    """Lista os arquetipos de veiculo disponiveis no workspace procedural."""
+    archetype_dir = ROOT / "vehicle_workspace" / "archetypes"
+    result = []
+    for path in sorted(archetype_dir.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            result.append({
+                "id": data.get("id", path.stem),
+                "label": data.get("label", path.stem),
+                "arquivo": str(path),
+            })
+        except Exception as exc:
+            result.append({"id": path.stem, "erro": str(exc), "arquivo": str(path)})
+    return json.dumps({"arquetipos": result}, indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
+async def vehicle_criar_spec(prompt: str = "", referencia_path: str = "", medidas_json: str = "{}", overrides_json: str = "{}") -> str:
+    """Cria e normaliza um VehicleSpec a partir de prompt, medidas e overrides.
+
+    Args:
+        prompt: Descricao curta do veiculo desejado.
+        referencia_path: Caminho opcional para imagem/blueprint de referencia.
+        medidas_json: JSON com medidas em mm, ex: {"length": 4750, "width": 2020}.
+        overrides_json: JSON opcional para sobrescrever campos completos da spec.
+    """
+    try:
+        from vehicle_workspace.vehicle.schema import create_spec
+        medidas = json.loads(medidas_json) if medidas_json else {}
+        overrides = json.loads(overrides_json) if overrides_json else {}
+        spec = create_spec(prompt=prompt, referencia_path=referencia_path, medidas=medidas, overrides=overrides)
+        return json.dumps(spec, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"success": False, "error": str(exc)}, indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
+async def vehicle_gerar_rig(spec_json: str, qualidade: str = "draft") -> str:
+    """Gera um rig dimensional headless para um VehicleSpec e renderiza vistas diagnosticas."""
+    return _run_vehicle_headless("rig", spec_json, qualidade)
+
+
+@mcp.tool()
+async def vehicle_gerar_blockout(spec_json: str, qualidade: str = "draft") -> str:
+    """Gera um blockout veicular headless com carroceria simples, rodas e auditoria basica."""
+    return _run_vehicle_headless("blockout", spec_json, qualidade)
+
+
+@mcp.tool()
+async def vehicle_gerar_modelo(spec_json: str, qualidade: str = "draft") -> str:
+    """Gera o modelo veicular MVP. Nesta versao, equivale ao blockout refinavel."""
+    return _run_vehicle_headless("model", spec_json, qualidade)
+
+
+@mcp.tool()
+async def vehicle_pipeline(prompt: str, referencia_path: str = "", medidas_json: str = "{}", budget_json: str = "{}") -> str:
+    """Fluxo composto: cria spec e gera o modelo veicular MVP em modo headless."""
+    try:
+        from vehicle_workspace.vehicle.schema import create_spec
+        medidas = json.loads(medidas_json) if medidas_json else {}
+        spec = create_spec(prompt=prompt, referencia_path=referencia_path, medidas=medidas)
+        return _run_vehicle_headless("model", json.dumps(spec, ensure_ascii=False), "draft")
+    except Exception as exc:
+        return json.dumps({"success": False, "error": str(exc)}, indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
+async def vehicle_auditar(modelo_id: str) -> str:
+    """Le o report.json de uma execucao de veiculo e retorna a auditoria salva.
+
+    Args:
+        modelo_id: Pasta da execucao ou caminho direto para report.json.
+    """
+    try:
+        from vehicle_workspace.orchestration.pipeline import read_report
+        report = read_report(modelo_id)
+        return json.dumps({
+            "success": True,
+            "modelo_id": modelo_id,
+            "audit": report.get("audit", {}),
+            "paths": report.get("paths", {}),
+        }, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"success": False, "error": str(exc), "modelo_id": modelo_id}, indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
+async def vehicle_renderizar_vistas(modelo_id: str) -> str:
+    """Lista os renders ja gerados para uma execucao de veiculo.
+
+    Args:
+        modelo_id: Pasta da execucao ou caminho direto para report.json.
+    """
+    try:
+        from vehicle_workspace.orchestration.pipeline import read_report
+        report = read_report(modelo_id)
+        return json.dumps({
+            "success": True,
+            "modelo_id": modelo_id,
+            "renders": report.get("renders", {}),
+            "paths": report.get("paths", {}),
+        }, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"success": False, "error": str(exc), "modelo_id": modelo_id}, indent=2, ensure_ascii=False)
+
+
 if __name__ == "__main__":
     mcp.run()
