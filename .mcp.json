@@ -2,11 +2,11 @@
   "mcpServers": {
     "gemini-web": {
       "command": "python",
-      "args": ["mcp-gemini-web/gemini_mcp.py"]
+      "args": ["C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\mcp-gemini-web\\gemini_mcp.py"]
     },
     "deepseek-web": {
       "command": "python",
-      "args": ["mcp-deepseek-web/deepseek_mcp.py"]
+      "args": ["C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\mcp-deepseek-web\\deepseek_mcp.py"]
     },
     "ia-local": {
       "command": "python",
@@ -17,7 +17,7 @@
     },
     "qwen-controller": {
       "command": "python",
-      "args": ["mcp-qwen-controller/qwen_mcp.py"],
+      "args": ["C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\mcp-qwen-controller\\qwen_mcp.py"],
       "env": {
         "QWEN_CDP_HOST": "127.0.0.1",
         "QWEN_CDP_PORT": "9222"
