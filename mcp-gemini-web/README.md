@@ -81,6 +81,30 @@ aba pode ficar fixada em segundo plano. `gemini_status()` deve indicar `conectad
 Para testar a ponte sem o host, `python testar.py` sobe o WebSocket e manda uma
 pergunta de teste (não rode junto com o servidor do host: disputam a porta 8765).
 
+## Modo HTTP (conexão persistente e portável)
+
+Por padrão o servidor fala **stdio**: o host (Claude Code) o inicia e o segura
+pelo pipe. Quando o host recarrega ou re-sincroniza, o servidor morre junto, e é
+isso que derruba a conexão. Em **HTTP** o servidor fica de pé sozinho numa porta
+e o host apenas se conecta pela URL, sobrevivendo a quedas do host. Como o
+streamable-http é padrão MCP, o mesmo servidor passa a ser plugável em qualquer
+host com conector MCP (Claude Code, Codex, Antigravity).
+
+```bash
+# sobe o servidor HTTP persistente (porta 8775 por padrão)
+GEMINI_TRANSPORT=http python gemini_mcp.py
+#   Windows PowerShell:  $env:GEMINI_TRANSPORT="http"; python gemini_mcp.py
+```
+
+O endpoint fica em `http://127.0.0.1:8775/mcp`. A bridge WebSocket (8765, para a
+extensão) sobe sozinha na primeira sessão. Variáveis: `GEMINI_TRANSPORT=http`,
+`GEMINI_HTTP_HOST` (padrão 127.0.0.1) e `GEMINI_HTTP_PORT` (padrão 8775). O
+registro deixa de ser um comando que o host inicia e vira uma URL que ele conecta:
+
+```json
+{ "mcpServers": { "gemini-web": { "type": "http", "url": "http://127.0.0.1:8775/mcp" } } }
+```
+
 ## inspecionar_gemini — ferramenta de exceção
 
 `inspecionar_gemini` descreve o DOM real da página (elementos, atributos, texto).

@@ -8,10 +8,15 @@ Ferramentas:
 - consultar_gemini         : chamada "API" - edita a 2a mensagem e le a resposta.
 - listar_conversas_gemini  : lista as conversas recentes da barra (titulo + id).
 - abrir_conversa_gemini    : abre uma conversa pelo id e devolve a URL aberta.
+- editar_arquivo_gemini    : Gemini edita um arquivo no disco e o servidor grava
+                             (conteudo nao passa pelo host); revise com git diff.
 """
 
+import asyncio
 import os
+import re
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
@@ -52,26 +57,52 @@ def _label_raciocinio(raciocinio: str | None) -> str | None:
         f"Raciocinio invalido: {raciocinio!r}. Use 'padrao' ou 'estendido'."
     )
 
-# Bridge unica do processo. Iniciada no lifespan (precisa do loop asyncio rodando).
+
+def _extrai_codigo(resp: str) -> str:
+    """Extrai o conteudo do 1o bloco cercado por crases triplas na resposta.
+
+    Se nao houver bloco cercado, usa a resposta inteira. Garante \\n no fim.
+    """
+    m = re.search(r"```[^\n]*\n(.*?)```", resp, re.DOTALL)
+    corpo = m.group(1) if m else resp.strip()
+    return corpo.rstrip("\n") + "\n"
+
+# Bridge unica do processo (singleton). Em stdio ha uma sessao so; em HTTP o
+# lifespan roda por sessao, entao subir a bridge precisa ser idempotente: a 1a
+# sessao abre o WebSocket na porta, as demais reusam a mesma instancia. Ninguem
+# a derruba enquanto o processo vive (o processo morrendo fecha tudo).
 bridge: Bridge | None = None
+_bridge_lock = asyncio.Lock()
+
+
+async def ensure_bridge() -> Bridge:
+    """Sobe a bridge WebSocket uma unica vez e devolve a instancia (singleton)."""
+    global bridge
+    if bridge is not None and bridge._server is not None:
+        return bridge
+    async with _bridge_lock:
+        if bridge is None or bridge._server is None:
+            host = os.environ.get("GEMINI_WS_HOST", "127.0.0.1")
+            port = int(os.environ.get("GEMINI_WS_PORT", "8765"))
+            b = Bridge(host, port)
+            await b.start()
+            bridge = b
+    return bridge
 
 
 @asynccontextmanager
 async def _lifespan(_server):
-    global bridge
-    host = os.environ.get("GEMINI_WS_HOST", "127.0.0.1")
-    port = int(os.environ.get("GEMINI_WS_PORT", "8765"))
-    bridge = Bridge(host, port)
-    await bridge.start()
-    try:
-        yield {}
-    finally:
-        await bridge.stop()
-        bridge = None
+    # Garante a bridge de pe (idempotente). Nao a derruba no teardown: e singleton
+    # do processo e pode ser compartilhada por varias sessoes (HTTP).
+    await ensure_bridge()
+    yield {}
 
 
 def build_server():
-    mcp = FastMCP("gemini-web", lifespan=_lifespan)
+    # host/port usados so no transporte HTTP (streamable-http); no stdio sao ignorados.
+    http_host = os.environ.get("GEMINI_HTTP_HOST", "127.0.0.1")
+    http_port = int(os.environ.get("GEMINI_HTTP_PORT", "8775"))
+    mcp = FastMCP("gemini-web", lifespan=_lifespan, host=http_host, port=http_port)
 
     @mcp.tool()
     async def gemini_status() -> str:
@@ -205,6 +236,63 @@ def build_server():
             raise RuntimeError("Bridge nao iniciada.")
         return await bridge.send_cmd(
             "abrir_conversa", {"conversa_id": conversa_id}, timeout=30
+        )
+
+    @mcp.tool()
+    async def editar_arquivo_gemini(
+        caminho: str, instrucao: str, timeout: int = 300
+    ) -> str:
+        """Delega ao Gemini a edicao de um arquivo, sem o conteudo passar pelo
+        contexto do host (economia de tokens).
+
+        O servidor le o arquivo do disco, pede ao Gemini que aplique `instrucao`
+        e devolva o arquivo INTEIRO, e grava o resultado por cima. Nem o conteudo
+        original nem o editado voltam pro host: o retorno e so um status curto.
+        Para revisar: COMMITE o arquivo antes de editar e rode `git diff
+        <caminho>` depois (mais os testes). O git e a rede de seguranca; se o
+        resultado ficar ruim, reverta com `git restore <caminho>`.
+
+        Limites: o Gemini ve so este arquivo, nao o resto do projeto, entao
+        mudancas que dependem de outros arquivos podem sair erradas (os testes
+        pegam). Arquivo muito grande pode truncar na saida do Gemini; o status
+        avisa se o arquivo encolheu demais. Use para mudancas locais a um arquivo.
+
+        Args:
+            caminho: caminho absoluto do arquivo existente a editar.
+            instrucao: o que mudar, em linguagem natural.
+            timeout: segundos a esperar a resposta do Gemini (padrao 300).
+        """
+        if bridge is None:
+            raise RuntimeError("Bridge nao iniciada.")
+        p = Path(caminho)
+        if not p.is_file():
+            raise RuntimeError(f"Arquivo nao encontrado: {caminho}")
+        original = p.read_text(encoding="utf-8")
+        prompt = (
+            "Voce e um editor de codigo preciso. Abaixo esta o conteudo COMPLETO "
+            f"do arquivo `{p.name}`. Aplique exatamente esta mudanca:\n\n"
+            f"{instrucao}\n\n"
+            "Devolva o arquivo INTEIRO ja editado, dentro de UM unico bloco de "
+            "codigo cercado por crases triplas. Nao escreva nada antes nem depois "
+            "do bloco, nao explique, nao omita partes com reticencias nem com "
+            "comentarios do tipo 'resto igual'. Preserve tudo o que nao muda.\n\n"
+            f"```\n{original}\n```"
+        )
+        resp = await bridge.ask(prompt, timeout=timeout)
+        novo = _extrai_codigo(resp)
+        if not novo.strip():
+            raise RuntimeError("Gemini devolveu vazio; nada foi gravado.")
+        if novo == original:
+            return f"sem mudancas: {caminho}"
+        p.write_text(novo, encoding="utf-8")
+        n_old = original.count("\n") + 1
+        n_new = novo.count("\n") + 1
+        aviso = ""
+        if n_new < n_old * 0.6:
+            aviso = " ATENCAO: encolheu bastante, confira o diff (possivel truncamento)."
+        return (
+            f"gravado: {caminho} ({n_old} -> {n_new} linhas)."
+            f"{aviso} Revise com: git diff -- {caminho}"
         )
 
     return mcp
