@@ -80,12 +80,33 @@ def compare_profiles(ours_height, blue_height, x_norm, regions=DEFAULT_REGIONS):
             best = {"mae": mae, "blue": cand, "flip": flip}
 
     blue = best["blue"]
+
+    # Comparacao de FORMA (isola escala/aspecto): normaliza cada perfil pela
+    # propria altura maxima -> diferenca pura de silhueta, em % da altura.
+    ours_n = ours / max(float(np.max(ours)), 1e-6)
+    blue_n = blue / max(float(np.max(blue)), 1e-6)
+    shape_regions = []
+    for name, lo, hi in regions:
+        sel = (x_norm >= lo) & (x_norm < hi)
+        if sel.sum() == 0:
+            continue
+        diff = (ours_n[sel] - blue_n[sel]) * 100.0
+        shape_regions.append({
+            "region": name,
+            "shape_error_pct": round(float(np.mean(diff)), 1),
+            "direction": ("higher" if np.mean(diff) > 3 else
+                          "lower" if np.mean(diff) < -3 else "ok"),
+        })
+
     report = {
         "upper_area_iou": round(_area_iou(ours, blue), 4),
         "mean_abs_error_mm": round(best["mae"], 1),
         "max_error_mm": round(float(np.max(np.abs(ours - blue))), 1),
+        "shape_area_iou": round(_area_iou(ours_n, blue_n), 4),
+        "shape_mean_abs_error_pct": round(float(np.mean(np.abs(ours_n - blue_n)) * 100.0), 1),
         "blueprint_flipped": best["flip"],
         "regions": _region_errors(ours, blue, x_norm, regions),
+        "shape_regions": shape_regions,
         "_ours_mm": ours,
         "_blue_mm": blue,
         "_x_norm": x_norm,
@@ -106,6 +127,14 @@ def compare_side(render_png, blueprint_png, length_mm,
     rep = compare_profiles(hp_r["height_mm"], hp_b["height_mm"], hp_r["x_norm"])
     rep["render_calibration"] = {k: hp_r[k] for k in ("mm_per_px", "bbox_px")}
     rep["blueprint_calibration"] = {k: hp_b[k] for k in ("mm_per_px", "bbox_px")}
+    # aspecto (altura_max / comprimento): flag de distorcao de escala da referencia
+    our_aspect = float(np.max(hp_r["height_mm"])) / length_mm
+    bp_aspect = float(np.max(hp_b["height_mm"])) / length_mm
+    rep["aspect"] = {
+        "our_height_over_length": round(our_aspect, 3),
+        "blueprint_height_over_length": round(bp_aspect, 3),
+        "blueprint_taller_by_pct": round((bp_aspect / our_aspect - 1.0) * 100.0, 1),
+    }
     return rep
 
 

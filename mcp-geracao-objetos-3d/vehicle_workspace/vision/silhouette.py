@@ -68,35 +68,56 @@ def profiles(mask):
     return top, bottom
 
 
+def car_extent(mask, min_col_frac=0.10):
+    """Extensao horizontal do CARRO (colunas com 'massa' real), ignorando linhas
+    finas (ex.: linha do solo do blueprint) que atravessam o recorte inteiro.
+
+    Uma coluna conta como carro se sua contagem de foreground supera uma fracao
+    da coluna mais densa. Retorna (cx0, cx1) inclusivo.
+    """
+    colmass = mask.sum(axis=0)
+    if colmass.max() == 0:
+        return None
+    thr = max(3.0, colmass.max() * min_col_frac)
+    car_cols = np.where(colmass >= thr)[0]
+    if car_cols.size < 2:
+        return None
+    return int(car_cols.min()), int(car_cols.max())
+
+
 def height_profile_mm(mask, length_mm, samples=240):
     """Perfil de ALTURA acima do solo, em mm, reamostrado em `samples` posicoes
-    normalizadas de X (0..1, esquerda->direita da bbox).
+    normalizadas de X (0..1 = nariz..traseira do CARRO, nao do recorte).
 
-    Calibra pela largura: mm_por_px = length_mm / largura_bbox_px.
-    Solo = base da bbox (rodas tocam o chao). Altura = (base - topo)*mm_por_px.
-    Colunas vazias sao interpoladas.
+    Calibra pelo comprimento do carro: mm_por_px = length_mm / largura_carro_px,
+    onde a largura ignora linhas finas (solo). Solo = base da silhueta. Altura
+    por coluna = (base - topo) * mm_por_px.
     """
     bb = bbox(mask)
     if bb is None:
         raise ValueError("Mascara vazia: nada para medir.")
-    x0, y0, x1, y1 = bb
-    width_px = max(x1 - x0, 1)
+    _, _, _, y1 = bb
+    ext = car_extent(mask)
+    if ext is None:
+        raise ValueError("Silhueta insuficiente para perfil.")
+    cx0, cx1 = ext
+    width_px = max(cx1 - cx0, 1)
     mm_per_px = length_mm / width_px
     top, _ = profiles(mask)
-    cols = np.arange(x0, x1 + 1)
-    top_seg = top[x0:x1 + 1]
-    height_px = (y1 - top_seg)  # base da bbox menos topo
-    # interpola NaN
+    cols = np.arange(cx0, cx1 + 1)
+    top_seg = top[cx0:cx1 + 1]
+    height_px = (y1 - top_seg)  # base (solo) menos topo
     valid = ~np.isnan(height_px)
     if valid.sum() < 2:
         raise ValueError("Silhueta insuficiente para perfil.")
-    xnorm = (cols - x0) / width_px
+    xnorm = (cols - cx0) / width_px
     samp = np.linspace(0.0, 1.0, samples)
     height_mm = np.interp(samp, xnorm[valid], height_px[valid] * mm_per_px)
     return {
         "x_norm": samp,
         "height_mm": height_mm,
         "mm_per_px": mm_per_px,
-        "bbox_px": [x0, y0, x1, y1],
+        "bbox_px": [cx0, bb[1], cx1, y1],
+        "car_extent_px": [cx0, cx1],
         "length_mm": length_mm,
     }
