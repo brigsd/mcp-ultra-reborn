@@ -17,11 +17,14 @@ centro do entre-eixos, no chao (Z=0). s longitudinal: 0 = traseira, 1 = frente.
 
 import math
 
+from vehicle_workspace.generators.aero import generate_aero
 from vehicle_workspace.generators.blender_utils import (
     create_cylinder_y,
     make_material,
 )
-from vehicle_workspace.generators.blockout import _create_supercar_aero
+from vehicle_workspace.generators.intakes import generate_intakes
+from vehicle_workspace.generators.lights import generate_lights
+from vehicle_workspace.generators.mirrors import generate_mirrors
 from vehicle_workspace.generators.wheels import generate_wheels
 from vehicle_workspace.vehicle.coordinate_system import wheel_positions
 
@@ -308,21 +311,32 @@ def generate_model(spec):
     mat_glass = make_material(
         "vehicle_glass_blue", (0.04, 0.07, 0.11, 0.40), roughness=0.05, alpha=0.40
     )
-    mat_dark = make_material(
-        "vehicle_dark_detail", (0.015, 0.017, 0.018, 1.0), roughness=0.7
-    )
 
     body_data = generate_body(spec)
     prof = body_data["prof"]
     canopy = _build_greenhouse(prof, mat_glass)
     wheels = generate_wheels(spec)
-    aero = _create_supercar_aero(spec, mat_dark)
+    lights = generate_lights(spec, prof)
+    aero = generate_aero(spec, prof)
+    intakes = generate_intakes(spec, prof)
+    mirrors = generate_mirrors(spec, prof)
 
+    objects = (
+        [body_data["body"].name, canopy.name]
+        + wheels["objects"]
+        + lights["objects"]
+        + aero["objects"]
+        + intakes["objects"]
+        + mirrors["objects"]
+    )
     return {
-        "objects": [body_data["body"].name, canopy.name] + wheels["objects"] + aero,
+        "objects": objects,
         "body": body_data["body"].name,
         "cabin": canopy.name,
         "wheels": wheels,
-        "aero": aero,
+        "lights": lights["objects"],
+        "aero": aero["objects"],
+        "intakes": intakes["objects"],
+        "mirrors": mirrors["objects"],
         "arch_cutters": body_data["cutters"],
     }

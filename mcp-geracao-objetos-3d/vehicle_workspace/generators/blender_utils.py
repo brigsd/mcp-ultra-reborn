@@ -27,9 +27,32 @@ def make_material(name, color, roughness=0.65, metallic=0.0, alpha=1.0):
     return mat
 
 
+def make_emission(name, color, strength=4.0):
+    """Material emissivo (faróis, lanternas, tiras de LED)."""
+    bpy = require_bpy()
+    mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    emit = nt.nodes.new("ShaderNodeEmission")
+    emit.inputs[0].default_value = color
+    emit.inputs[1].default_value = strength
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(emit.outputs[0], out.inputs[0])
+    mat.diffuse_color = color
+    return mat
+
+
 def assign_material(obj, mat):
     obj.data.materials.clear()
     obj.data.materials.append(mat)
+    return obj
+
+
+def create_box_rot(name, location, dimensions, rotation=(0, 0, 0), material=None, bevel=0.0):
+    """create_box com rotacao do objeto (nao aplicada, so no objeto)."""
+    obj = create_box(name, location, dimensions, material=material, bevel=bevel)
+    obj.rotation_euler = rotation
     return obj
 
 

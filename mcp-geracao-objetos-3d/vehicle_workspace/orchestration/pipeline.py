@@ -7,6 +7,7 @@ from vehicle_workspace.generators.body_loft import generate_model
 from vehicle_workspace.generators.rig import generate_rig
 from vehicle_workspace.rendering.orthographic_views import render_silhouette, render_views
 from vehicle_workspace.validation.dimensions import audit_dimensions
+from vehicle_workspace.validation.feature_presence import audit_feature_presence
 from vehicle_workspace.validation.symmetry import audit_symmetry
 from vehicle_workspace.validation.wheel_fitment import audit_wheel_fitment
 from vehicle_workspace.vehicle.schema import load_spec
@@ -28,12 +29,15 @@ def _save_blend(path):
     bpy.ops.wm.save_as_mainfile(filepath=str(path))
 
 
-def _audit(spec):
-    return {
+def _audit(spec, object_names=None):
+    report = {
         "dimensions": audit_dimensions(spec),
         "symmetry": audit_symmetry(spec),
         "wheel_fitment": audit_wheel_fitment(spec),
     }
+    if object_names is not None:
+        report["feature_presence"] = audit_feature_presence(spec, object_names)
+    return report
 
 
 def run_vehicle_action(action, spec_json, output_dir, quality="draft"):
@@ -81,7 +85,10 @@ def run_vehicle_action(action, spec_json, output_dir, quality="draft"):
             silhouette = {"lado": sil["path"]}
             render_report["renders"]["silhouette_lado"] = sil["path"]
 
-    audit_report = _audit(spec) if action in {"blockout", "model"} else {}
+    model_objects = None
+    if "model" in generation:
+        model_objects = generation["model"].get("objects")
+    audit_report = _audit(spec, model_objects) if action in {"blockout", "model"} else {}
 
     blend_path = output / "scene.blend"
     try:

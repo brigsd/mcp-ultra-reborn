@@ -2,9 +2,17 @@ from vehicle_workspace.generators.blender_utils import all_vehicle_objects, bbox
 from vehicle_workspace.vehicle.units import m_to_mm
 
 
+# Apendices fora do envelope dimensional homologado (largura exclui retrovisor,
+# altura nao conta asa, etc.). O envelope e corpo + vidro + rodas.
+_APPENDAGE_MARKERS = ("_rig_", "_mirror_", "_aero_", "_light_", "_intake_")
+
+
 def audit_dimensions(spec):
     dims = spec["dimensions"]
-    objects = [obj for obj in all_vehicle_objects() if not obj.name.startswith("vehicle_rig_")]
+    objects = [
+        obj for obj in all_vehicle_objects()
+        if not any(m in obj.name for m in _APPENDAGE_MARKERS)
+    ]
     mn, mx, center, actual = bbox_for_objects(objects)
     actual_mm = {
         "length": m_to_mm(actual.x),
