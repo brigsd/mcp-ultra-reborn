@@ -96,9 +96,11 @@ def _profiles(spec):
                    (0.50, 0.87), (0.66, 0.97), (0.78, 1.00), (0.90, 0.74),
                    (1.00, 0.52)]
         # deck = altura da cintura/ombro (NAO o teto): chato, sobe pro deck traseiro
-        deck_keys = [(0.00, 0.46), (0.10, 0.52), (0.20, 0.62), (0.30, 0.60),
-                     (0.44, 0.53), (0.56, 0.50), (0.70, 0.45), (0.78, 0.47),
-                     (0.86, 0.40), (1.00, 0.30)]
+        # ajustado contra blueprint (fase 4): capo e deck traseiro mais cheios,
+        # mas deck baixo sob o greenhouse (s 0.44-0.56) p/ nao afundar o vidro
+        deck_keys = [(0.00, 0.52), (0.10, 0.60), (0.20, 0.66), (0.30, 0.62),
+                     (0.44, 0.53), (0.56, 0.50), (0.70, 0.53), (0.78, 0.55),
+                     (0.86, 0.47), (1.00, 0.34)]
         gh_span = (0.30, 0.64)
         gh_top_keys = [(0.30, 0.60), (0.38, 0.86), (0.46, 0.99), (0.54, 1.00),
                        (0.60, 0.84), (0.64, 0.66)]
