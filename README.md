@@ -32,6 +32,7 @@ fato necessário.
 | `mcp-gemini-web` | delegação web | 8765 | [↗](mcp-gemini-web/README.md) |
 | `mcp-deepseek-web` | delegação web | 8766 | [↗](mcp-deepseek-web/README.md) |
 | `mcp-qwen-controller` | delegação web (app desktop) | CDP 9222 | [↗](mcp-qwen-controller/README.md) |
+| `mcp-geracao-objetos-3d` | modelagem 3D | Blender 19000 | [↗](mcp-geracao-objetos-3d/README.md) |
 
 ### mcp-qwen-coder — acesso ao terminal e aos arquivos
 
@@ -82,11 +83,17 @@ não uma aba do navegador. Por ser um aplicativo Electron iniciado com a porta d
 depuração aberta, o servidor o controla diretamente pelo Chrome DevTools Protocol,
 sem extensão. A conversa vive em um *webview* (`chat.qwen.ai`) dentro do aplicativo.
 
-A superfície de ferramentas é a mesma dos demais: `pergunta_qwen` para o envio
+As ferramentas expostas são `pergunta_qwen` para o envio
 simples, `selecionar_modelo_qwen` para trocar o modelo, o par `configurar_qwen` mais
 `consultar_qwen` para o fluxo "API", `qwen_status` para o estado e `inspecionar_qwen`
 para a calibração excepcional. O requisito de operação é que o Qwen desktop esteja
 aberto, autenticado e iniciado com `--remote-debugging-port=9222`.
+
+### mcp-geracao-objetos-3d — modelagem 3D geométrica precisa via Blender
+
+Exerce controle sobre o Blender por meio de um addon ponte (bridge HTTP na porta 19000). Ele limpa a cena, executa scripts paramétricos B-rep (usando a API local do projeto) e retorna relatórios geométricos e de qualidade da malha junto com capturas ortográficas (screenshots das 4 vistas) dos modelos gerados.
+
+As ferramentas expostas são `status_blender_bridge`, `gerar_modelo_3d`, `obter_dimensoes_peca`, `listar_referencias_locais` e `baixar_referencia_3d`. A modelagem é validada fisicamente usando asserções de engenharia e inspeções de geometria manifold diretamente no kernel do Blender.
 
 ## Arquitetura dos servidores de delegação web
 

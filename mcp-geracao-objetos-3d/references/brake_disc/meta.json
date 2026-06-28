@@ -1,0 +1,93 @@
+{
+  "nome": "brake_disc",
+  "nome_pt": "Disco de Freio",
+  "funcao": "Componente rotativo do sistema de freio. Converte energia cinética em calor por atrito com as pastilhas pressionadas pela pinça.",
+
+  "variantes_implementadas": ["compacto", "medio", "esportivo"],
+
+  "referencias": [
+    {
+      "arquivo": "ref_fig1_explodida_isometrica.png",
+      "descricao": "FIG.1 — Vista isométrica explodida (2560×3300px, 300 DPI). Mostra 4 componentes separados: disco inboard (10) com furos e slots curvos, anel intermediário (11), impeller centrífugo livre (12/24) com ~60 aletas triangulares, disco outboard (13) com slots alongados e pinos de montagem.",
+      "tipo": "patente",
+      "utilidade_modelagem": "ALTA — confirma estrutura em camadas e geometria das aletas",
+      "fonte_nome": "USPTO — US20090314591A1",
+      "pdf_origem": "patent_US20090314591A1.pdf",
+      "pagina_no_pdf": 2,
+      "resolucao": "2560×3300",
+      "licenca": "Domínio público (patente USPTO)",
+      "baixado_em": "2026-05-23"
+    },
+    {
+      "arquivo": "ref_fig2_vista_frontal.png",
+      "descricao": "FIG.2 — Vista frontal montada (2560×3300px, 300 DPI). Disco montado visto de frente: anel externo (25), slots curvos do impeller visíveis através do disco (26), anel interno (33), furo central (34). Linha de corte A-A indicada. ~20 furos de ventilação ao redor da periferia.",
+      "tipo": "patente",
+      "utilidade_modelagem": "ALTA — proporções radiais: onde termina o anel externo, onde começam os slots",
+      "fonte_nome": "USPTO — US20090314591A1",
+      "pdf_origem": "patent_US20090314591A1.pdf",
+      "pagina_no_pdf": 3,
+      "resolucao": "2560×3300",
+      "licenca": "Domínio público (patente USPTO)",
+      "baixado_em": "2026-05-23"
+    },
+    {
+      "arquivo": "ref_fig3_secao_transversal.png",
+      "descricao": "FIG.3 — Seção A-A (2560×3300px, 300 DPI). Meia-seção do conjunto montado. Esquerda: pastilha de freio (16, pontilhado) pressionando a face de fricção esquerda (26/28) do disco inboard (10). Centro: impeller (12/24, perfil em V), anel intermediário (11/22/23). Direita: hub/chapéu (14) com pino (20), disco outboard (13) com slot (19). Topo-direita: cubo da roda (32-35) como bloco sólido com hachura.",
+      "tipo": "patente",
+      "utilidade_modelagem": "ALTÍSSIMA — perfil completo para revolução (spin), hat profile, gap entre faces",
+      "fonte_nome": "USPTO — US20090314591A1",
+      "pdf_origem": "patent_US20090314591A1.pdf",
+      "pagina_no_pdf": 4,
+      "resolucao": "2560×3300",
+      "licenca": "Domínio público (patente USPTO)",
+      "baixado_em": "2026-05-23"
+    },
+    {
+      "arquivo": "montage_moyeu_rolamento.svg",
+      "descricao": "Diagrama de montagem do conjunto cubo-rolamento-disco — relações espaciais e sequência de encaixe.",
+      "tipo": "diagrama_montagem",
+      "utilidade_modelagem": "MEDIA — posicionamento relativo no assembler",
+      "fonte_nome": "Wikimedia Commons",
+      "licenca": "CC BY-SA",
+      "baixado_em": "2026-05-23"
+    }
+  ],
+
+  "analise_fig3_secao": {
+    "estrutura": "ESPECIALIZADA — não é disco padrão. Tem impeller centrífugo LIVRE entre dois discos separados (US20090314591A1).",
+    "disco_padrao_vs_este": "Disco padrão ventilado: vanes FIXAS fundidas integralmente em uma peça. Este: impeller livre entre duas faces separadas — inovação patenteada para melhor resfriamento.",
+    "geometria_valida_para_referencia": [
+      "HAT PROFILE (14): cubo central claramente mais alto que o anel de fricção externo — degrau visível na seção",
+      "Duas faces de fricção separadas por gap — base do conceito ventilado",
+      "Pastilha (16) em pontilhado pressionando face externa — mostra espessura relativa da pastilha vs disco",
+      "Cubo da roda (32-35) como bloco sólido à direita — mostra como o disco se encaixa no conjunto"
+    ],
+    "nao_replicar_diretamente": [
+      "O impeller livre (12/24) — é a inovação patenteada, não geometria padrão",
+      "Os slots curvos no disco (26, 27) — específicos do design com impeller rotativo"
+    ]
+  },
+
+  "notas_geometricas": [
+    "HAT PROFILE: cubo central mais alto que anel externo — degrau obrigatório para realismo (ver fig3)",
+    "DISCO SÓLIDO (simples): cilindro oco — implementação atual em parts/brake_disc.py",
+    "DISCO VENTILADO PADRÃO: duas faces planas conectadas por vanes FIXAS fundidas — próxima evolução do parts/brake_disc.py",
+    "DISCO VENTILADO ESPECIALIZADO (esta patente): impeller livre entre faces separadas — não implementar por ora",
+    "Furos de ventilação na periferia (~20): visíveis na fig2 como pequenos círculos no anel externo",
+    "Chanfros nas bordas das faces são obrigatórios — arestas vivas não existem em peças reais",
+    "Espessura mínima de uso ~87% da espessura nova"
+  ],
+
+  "proxima_implementacao": {
+    "objetivo": "Evoluir parts/brake_disc.py para disco ventilado padrão (vanes fixas)",
+    "estrutura": "face_inboard (anel plano) + vanes_fixas (pilares radiais fundidos) + face_outboard (anel plano)",
+    "approach": "Criar os três componentes separados e fazer join, ou usar spin() de perfil em U",
+    "referencia_melhor": "Buscar patente de disco ventilado PADRÃO (sem impeller livre) para confirmar geometria das vanes"
+  },
+
+  "relacoes_com_outras_pecas": {
+    "caliper": "A pinça abraça o disco. folga_lateral = 0.5–1.5mm entre face do disco e pastilha em repouso",
+    "roda":    "Disco fixado ao cubo pelos mesmos parafusos da roda. PCD deve coincidir",
+    "rolamento": "Cubo apoiado em rolamentos. Consultar catalog.ROLAMENTO para dimensões"
+  }
+}

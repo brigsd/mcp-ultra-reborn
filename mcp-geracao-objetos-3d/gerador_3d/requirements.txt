@@ -1,0 +1,33 @@
+# Referência do ambiente virtual: D:\ComfyUI\venv
+# Python 3.12.10 | CUDA 12.6
+#
+# Para recriar o ambiente do zero:
+#   python -m venv D:\ComfyUI\venv
+#   D:\ComfyUI\venv\Scripts\activate
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+#   pip install -r requirements.txt (demais dependências via ComfyUI Manager)
+#
+# NOTA: flash_attn e xformers NÃO estão instalados.
+#       O backend de atenção está configurado para "sdpa" (PyTorch nativo).
+
+--index-url https://download.pytorch.org/whl/cu126
+
+torch==2.8.0+cu126
+torchvision==0.23.0+cu126
+torchaudio==2.8.0+cu126
+
+# Gerenciamento de modelos e downloads sem restrições de gate
+modelscope
+
+# Processamento de imagem / remoção de fundo
+# rembg  # opcional — descomente se quiser usar remoção de fundo automática no nó PreProcessImage
+
+# Dependências do ComfyUI-Trellis2 (instaladas manualmente no venv)
+# transformers>=5.12.1
+# huggingface_hub
+# pymeshlab
+# trimesh
+# tqdm
+# pillow
+# numpy
+# opencv-python

@@ -22,6 +22,10 @@
         "QWEN_CDP_HOST": "127.0.0.1",
         "QWEN_CDP_PORT": "9222"
       }
+    },
+    "geracao-3d": {
+      "command": "C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\mcp-geracao-objetos-3d\\geracao_3d_mcp.py"]
     }
   }
 }

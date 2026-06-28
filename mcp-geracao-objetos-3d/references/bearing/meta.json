@@ -1,0 +1,68 @@
+{
+  "nome": "bearing",
+  "nome_pt": "Rolamento de Esferas de Sulco Profundo",
+  "funcao": "Suporta cargas radiais e axiais entre eixo girante e estrutura fixa. Permite rotação com atrito mínimo.",
+
+  "variantes_implementadas": [],
+
+  "referencias": [
+    {
+      "arquivo": "ref_p03_secoes_transversais.png",
+      "descricao": "Seção transversal rolamento aberto single row (Fig.1) e com filling slots / Max type (Fig.2). Mostra claramente: pista externa (outer ring), pista interna (inner ring), esferas, gaiola (cage). Perfil da pista = arco circular (sulco profundo). Gaiola em janela separando esferas.",
+      "tipo": "catalogo_fabricante",
+      "utilidade_modelagem": "ALTÍSSIMA — perfil de revolução da pista + geometria da gaiola",
+      "fonte_nome": "SKF — Deep Groove Ball Bearings",
+      "pdf_origem": "skf_deep_groove_ball_bearings.pdf",
+      "pagina_no_pdf": 3,
+      "resolucao": "2550×3263",
+      "licenca": "© SKF — uso educacional",
+      "baixado_em": "2026-05-23"
+    },
+    {
+      "arquivo": "ref_p04_variacoes_com_vedacao.png",
+      "descricao": "Variações: Fig.3 = shields metálicos (RSH/2RSH), Fig.4 = vedações de borracha (RSL/2RSL), Fig.5/6 = snap ring (NR). Mostra perfis de vedação, como shield se encaixa na ranhura da pista externa, folga entre shield e pista interna.",
+      "tipo": "catalogo_fabricante",
+      "utilidade_modelagem": "MEDIA — geometria de vedações para modelos detalhados",
+      "fonte_nome": "SKF — Deep Groove Ball Bearings",
+      "pdf_origem": "skf_deep_groove_ball_bearings.pdf",
+      "pagina_no_pdf": 4,
+      "resolucao": "2550×3263",
+      "licenca": "© SKF — uso educacional",
+      "baixado_em": "2026-05-23"
+    },
+    {
+      "arquivo": "ref_p05_tabela_folgas_internas.png",
+      "descricao": "Tabela 1 completa: Folga interna radial (em mm) para todas as séries de rolamentos de esferas. Bore diameter de 2.5mm a 240mm. Classes: C2 (menor folga), Normal, C3, C4, C5 (maior folga). Valores min/max para cada classe.",
+      "tipo": "catalogo_fabricante",
+      "utilidade_modelagem": "ALTA — dados dimensionais precisos de gap interno para todas as séries",
+      "fonte_nome": "SKF — Deep Groove Ball Bearings",
+      "pdf_origem": "skf_deep_groove_ball_bearings.pdf",
+      "pagina_no_pdf": 5,
+      "resolucao": "2550×3263",
+      "licenca": "© SKF — uso educacional",
+      "baixado_em": "2026-05-23"
+    }
+  ],
+
+  "analise_p03_secao": {
+    "pista_interna": "Anel com ranhura circular profunda voltada para fora — perfil em U arredondado",
+    "pista_externa": "Anel com ranhura circular profunda voltada para dentro — espelho da pista interna",
+    "esferas": "Encaixadas nas duas ranhuras. Diâmetro calculável: d_esfera ≈ (D - d) / 2 × 0.6",
+    "gaiola": "Anel com janelas que separam as esferas. Ocupa o espaço radial entre as pistas. Espessura ~30% do gap entre pistas",
+    "filling_slots": "Max type (Fig.2) tem entalhes nas duas pistas para inserir mais esferas. Visível como ranhuras extras na pista"
+  },
+
+  "notas_geometricas": [
+    "Tolerâncias extremamente apertadas — para modelagem, use dimensões exatas do catalog.ROLAMENTO",
+    "O perfil da pista é um arco circular (não retangular) — afeta como as esferas assentam",
+    "Gaiola ocupa ~40% do espaço entre pistas — não modelar como anel sólido",
+    "Chanfros nas bordas das pistas são obrigatórios — facilitam a montagem no eixo e no alojamento",
+    "Shields metálicos têm uma pequena folga em relação à pista interna — não encostam (vedação labirinto)"
+  ],
+
+  "relacoes_com_outras_pecas": {
+    "eixo":  "Pista interna pressiona no eixo por interferência de 0.005–0.015mm",
+    "cubo":  "Pista externa assenta no alojamento do cubo — ajuste deslizante leve",
+    "disco_freio": "O cubo que suporta o disco de freio é apoiado em rolamentos — ver catalog.ROLAMENTO"
+  }
+}

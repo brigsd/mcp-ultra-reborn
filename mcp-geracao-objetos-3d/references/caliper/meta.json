@@ -1,0 +1,19 @@
+{
+  "nome": "caliper",
+  "nome_pt": "Pinça de Freio",
+  "funcao": "Aperta as pastilhas contra o disco quando o freio é acionado. Contém pistões hidráulicos e deve ter rigidez estrutural muito alta para não deformar sob pressão.",
+  "variantes_implementadas": [],
+  "referencias": [],
+  "notas_geometricas": [
+    "Corpo monobloco ou de duas peças — afeta a forma do encaixe interno",
+    "Os pistões são cilindros ocos com superfície interna polida — tolerância < 0.05mm",
+    "A abertura da pinça deve ser ligeiramente maior que a espessura do disco + 2x pastilha + folgas",
+    "Furos de sangria (bleeder) são obrigatórios na parte superior de cada câmara de pistão",
+    "Nervuras estruturais externas são comuns em pinças esportivas — aumentam rigidez sem peso excessivo"
+  ],
+  "relacoes_com_outras_pecas": {
+    "brake_disc": "A abertura interna da pinça envolve o disco. Ver meta.json do brake_disc para folgas",
+    "brake_pads":  "As pastilhas ficam dentro da pinça, presas por pinos. Espessura nova ~12mm, mínima ~3mm",
+    "bracket":     "A pinça se fixa ao bracket (suporte) por 2 parafusos M12. Eixo dos furos perpendicular ao disco"
+  }
+}

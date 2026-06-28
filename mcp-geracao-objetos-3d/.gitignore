@@ -1,0 +1,35 @@
+# Clone de terceiro (não é nosso — tem git próprio, ver brigsd/MCP_IA_EPLAN)
+vision_mcp_ref/
+
+# Espaço de testes do usuário (caminho neural) — só os documentos sobem.
+# Modelo, pesos, clone do TRELLIS.2 e InstantMeshes.exe ficam de fora (pesados/regeneráveis).
+gerador_3d/*
+!gerador_3d/README.md
+!gerador_3d/requirements.txt
+!gerador_3d/iniciar_comfyui.bat
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Binários grandes / regeneráveis (baixáveis via tools/fetch_references.py)
+*.pdf
+
+# Malhas/geometria geradas (regeneráveis rodando o script)
+*.stl
+*.obj
+*.glb
+*.step
+
+# Renders gerados pela POC
+prototype/views/
+
+# Material de referência sob copyright — NÃO redistribuir (SKF, uso educacional)
+references/bearing/ref_p*.png
+
+# Sistema
+.DS_Store
+Thumbs.db
