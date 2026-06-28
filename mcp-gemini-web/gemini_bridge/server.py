@@ -104,6 +104,18 @@ async def _lifespan(_server):
     yield {}
 
 
+def get_downloads_folder() -> str:
+    import winreg
+    try:
+        sub_key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, sub_key) as key:
+            downloads_dir, _ = winreg.QueryValueEx(key, "{374DE290-123F-4565-9164-39C4925E467B}")
+            return downloads_dir
+    except Exception:
+        import os
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
+
 def _salvar_imagem_local(base64_data: str, pasta_key: str | None) -> str:
     import base64
     import datetime
@@ -135,6 +147,48 @@ def _salvar_imagem_local(base64_data: str, pasta_key: str | None) -> str:
     except Exception as e:
         print(f"[gemini-web] Erro ao salvar imagem local: {e}", file=sys.stderr)
         return f"Erro ao salvar: {e}"
+
+
+def _mover_imagem_download(rel_path: str, pasta_key: str | None) -> str:
+    import shutil
+    import time
+
+    downloads_dir = get_downloads_folder()
+    origem_path = os.path.join(downloads_dir, rel_path)
+
+    repo_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    subpasta = "uso-geral"
+    if pasta_key and pasta_key.strip().lower() == "referencia_3d":
+        subpasta = "referencia_3d"
+
+    destino_dir = os.path.join(
+        repo_root, "mcp-gemini-web", "imagens", subpasta
+    )
+    os.makedirs(destino_dir, exist_ok=True)
+
+    filename = os.path.basename(rel_path)
+    filepath = os.path.join(destino_dir, filename)
+
+    # Aguarda o arquivo terminar de ser baixado (ate 5 segundos)
+    for _ in range(10):
+        if os.path.exists(origem_path) and os.path.getsize(origem_path) > 0:
+            break
+        time.sleep(0.5)
+
+    if not os.path.exists(origem_path):
+        return f"Erro: Arquivo temporario nao encontrado em {origem_path}"
+
+    try:
+        shutil.move(origem_path, filepath)
+        # Limpa diretorio temporario se vazio
+        temp_dir = os.path.dirname(origem_path)
+        if os.path.exists(temp_dir) and not os.listdir(temp_dir):
+            os.rmdir(temp_dir)
+        return filepath
+    except Exception as e:
+        return f"Erro ao mover arquivo: {e}"
 
 
 def build_server():
@@ -232,9 +286,10 @@ def build_server():
             resp_json = json.loads(resp_data)
             resp_text = resp_json.get("text", "")
             images = resp_json.get("images", [])
+            download_errors = resp_json.get("download_errors", [])
 
+            caminhos = []
             if images:
-                caminhos = []
                 for img in images:
                     base64_data = img.get("base64")
                     if base64_data:
@@ -242,12 +297,20 @@ def build_server():
                             base64_data, pasta_destino
                         )
                         caminhos.append(caminho)
+
+            if caminhos:
                 resp_text += "\n\n[Salvo Localmente]:\n" + "\n".join(
                     f"- {c}" for c in caminhos
                 )
+
+            if download_errors:
+                resp_text += "\n\n[Erros de Download no Chrome]:\n" + "\n".join(
+                    f"- {err}" for err in download_errors
+                )
+
             return resp_text
-        except Exception:
-            return resp_data
+        except Exception as e:
+            return f"ERRO NO PARSE JSON DO PYTHON: {e}\n\nRAW RESP DATA: {resp_data}"
 
 
     @mcp.tool()

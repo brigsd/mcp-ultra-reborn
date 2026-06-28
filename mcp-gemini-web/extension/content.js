@@ -290,6 +290,22 @@ async function configurarCriarImagem(habilitar) {
   }
 }
 
+async function blobUrlToBase64(blobUrl) {
+  try {
+    const r = await fetch(blobUrl);
+    const blob = await r.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    console.error("[gemini-web] Erro ao converter blob:", e);
+    return null;
+  }
+}
+
 async function handleGerarImagem(prompt, imagemPrecisa) {
   console.log("[gemini-web] handleGerarImagem iniciada. prompt =", prompt, "imagemPrecisa =", imagemPrecisa);
   const habilitar = (imagemPrecisa === undefined || imagemPrecisa === null) ? true : !!imagemPrecisa;
@@ -315,18 +331,29 @@ async function handleGerarImagem(prompt, imagemPrecisa) {
   
   const lastResp = ultimaResposta();
   const urls = [];
+  const imgs = [];
   if (lastResp) {
     const imgEls = Array.from(lastResp.querySelectorAll('generated-image img, single-image img, img[src^="http"], img[src^="blob:"]'));
     for (const img of imgEls) {
       const src = img.src;
       if (!src || src.includes("googleusercontent.com/assets/") || src.includes("gstatic.com")) continue;
-      urls.push(src);
+      
+      if (src.startsWith("blob:")) {
+        console.log("[gemini-web] Convertendo blob URL na pagina:", src);
+        const base64 = await blobUrlToBase64(src);
+        if (base64) {
+          imgs.push({ url: src, base64: base64 });
+        }
+      } else {
+        urls.push(src);
+      }
     }
   }
 
   return JSON.stringify({
     text: rawText,
-    urls: urls
+    urls: urls,
+    images: imgs
   });
 }
 

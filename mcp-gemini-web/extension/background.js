@@ -33,20 +33,26 @@ function connect() {
       if (msg.type === "gerar_imagem") {
         try {
           const data = JSON.parse(text);
-          const imgs = [];
+          const imgs = data.images || [];
+          const errors = [];
           for (const url of (data.urls || [])) {
             console.log("[gemini-web] Baixando no background:", url);
-            const base64 = await baixarImagemBase64(url);
-            if (base64) {
-              imgs.push({ url, base64 });
+            try {
+              const base64 = await baixarImagemBase64(url);
+              if (base64) {
+                imgs.push({ url, base64 });
+              }
+            } catch (err) {
+              errors.push(`${url}: ${(err && err.message) || err}`);
             }
           }
           text = JSON.stringify({
             text: data.text,
-            images: imgs
+            images: imgs,
+            download_errors: errors
           });
         } catch (e) {
-          console.error("[gemini-web] Falha ao processar imagens no background:", e);
+          console.error("[gemini-web] Falha no downloads:", e);
         }
       }
       send({ type: "answer", id: msg.id, text });
@@ -130,12 +136,13 @@ function arrayBufferToBase64(buffer) {
 
 async function baixarImagemBase64(url) {
   try {
-    const r = await fetch(url);
+    const cleanUrl = url.split('?')[0];
+    const r = await fetch(cleanUrl);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const buffer = await r.arrayBuffer();
     return arrayBufferToBase64(buffer);
   } catch (e) {
     console.error("[gemini-web] Erro ao baixar imagem no background:", e);
-    return null;
+    throw e;
   }
 }
