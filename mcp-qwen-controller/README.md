@@ -144,11 +144,9 @@ Devido às restrições de segurança do Qwen Desktop no Windows (que exige estr
     "qwen-controller": {
       "command": "uvx",
       "args": [
-        "--with",
-        "mcp",
-        "--with",
-        "websockets",
-        "C:/Users/tiago/Desktop/mcp-ultra-reborn/mcp-qwen-controller/qwen_mcp.py"
+        "--from",
+        "C:/Users/<voce>/Desktop/mcp-ultra-reborn/mcp-qwen-controller",
+        "mcp-qwen-controller"
       ]
     }
   }

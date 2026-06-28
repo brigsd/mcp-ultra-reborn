@@ -146,3 +146,8 @@ def build_server():
             await sub_qwen.cdp.close()
 
     return mcp
+
+
+def main():
+    """Entry point para execução via `uvx --from ... mcp-qwen-controller`."""
+    build_server().run()
