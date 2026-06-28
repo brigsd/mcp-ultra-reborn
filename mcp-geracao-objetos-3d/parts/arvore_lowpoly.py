@@ -66,7 +66,8 @@ def _malha_esqueleto(pos, arestas, nome):
     me.from_pydata(verts, [tuple(int(i) for i in a) for a in arestas], [])
     me.update()
     obj = bpy.data.objects.new(nome, me)
-    bpy.context.collection.objects.link(obj)
+    colecao = bpy.context.collection if bpy.context.collection is not None else bpy.data.scenes[0].collection
+    colecao.objects.link(obj)
     return obj
 
 
