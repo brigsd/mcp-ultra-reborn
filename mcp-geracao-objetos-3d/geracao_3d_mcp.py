@@ -608,5 +608,121 @@ async def vehicle_renderizar_vistas(modelo_id: str) -> str:
         return json.dumps({"success": False, "error": str(exc), "modelo_id": modelo_id}, indent=2, ensure_ascii=False)
 
 
+def _find_silhouette(modelo_id: str) -> str:
+    """Localiza a silhueta lateral de uma execucao de modelo."""
+    p = Path(modelo_id)
+    candidates = [
+        p / "renders" / "silhouette_lado.png",
+        p / "silhouette_lado.png",
+    ]
+    if p.suffix == ".json":  # apontaram report.json
+        candidates.insert(0, p.parent / "renders" / "silhouette_lado.png")
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return ""
+
+
+@mcp.tool()
+async def vehicle_calibrar_blueprint(imagem_path: str, medidas_json: str) -> str:
+    """Calibra UMA vista de blueprint: detecta a silhueta, mede a bbox em pixels
+    e converte para mm/pixel usando uma medida conhecida.
+
+    Args:
+        imagem_path: PNG de UMA vista (ex.: recorte da vista lateral).
+        medidas_json: JSON com a medida conhecida, ex.:
+            {"axis": "length", "value_mm": 4750}  (axis: length|height)
+    """
+    try:
+        from vehicle_workspace.vision.silhouette import (
+            bbox, foreground_mask, load_gray,
+        )
+        med = json.loads(medidas_json) if medidas_json else {}
+        axis = med.get("axis", "length")
+        value_mm = float(med.get("value_mm", 0) or 0)
+        if value_mm <= 0:
+            return json.dumps({"success": False, "error": "medidas_json precisa de value_mm > 0."}, indent=2)
+        gray = load_gray(imagem_path)
+        mask = foreground_mask(gray, kind="auto")
+        bb = bbox(mask)
+        if bb is None:
+            return json.dumps({"success": False, "error": "Nenhuma silhueta detectada na imagem."}, indent=2)
+        x0, y0, x1, y1 = bb
+        span_px = (x1 - x0) if axis == "length" else (y1 - y0)
+        mm_per_px = value_mm / max(span_px, 1)
+        return json.dumps({
+            "success": True,
+            "imagem_path": imagem_path,
+            "bbox_px": [x0, y0, x1, y1],
+            "axis": axis,
+            "value_mm": value_mm,
+            "mm_per_px": round(mm_per_px, 4),
+            "implied_length_mm": round((x1 - x0) * mm_per_px, 1),
+            "implied_height_mm": round((y1 - y0) * mm_per_px, 1),
+        }, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"success": False, "error": str(exc), "imagem_path": imagem_path}, indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
+async def vehicle_comparar_blueprint(modelo_id: str, blueprint_lateral_path: str, length_mm: float = 0.0) -> str:
+    """Compara a silhueta lateral do modelo gerado com a vista lateral de um
+    blueprint. Calibra ambos pelo comprimento, foca o perfil superior, faz
+    auto-flip e devolve IoU + erro por regiao. Salva um PNG de overlay.
+
+    Requer que o modelo tenha sido gerado com qualidade standard/high (gera a
+    silhueta). length_mm: comprimento real do veiculo em mm (se 0, le do report).
+
+    Args:
+        modelo_id: Pasta da execucao do modelo (ou report.json).
+        blueprint_lateral_path: PNG recortado da VISTA LATERAL do blueprint.
+        length_mm: Comprimento total conhecido, em mm.
+    """
+    try:
+        from vehicle_workspace.orchestration.pipeline import read_report
+        from vehicle_workspace.vision.compare import compare_side, public_report
+        from vehicle_workspace.vision.overlay import draw_overlay
+
+        our_sil = _find_silhouette(modelo_id)
+        if not our_sil:
+            return json.dumps({
+                "success": False,
+                "error": "Silhueta do modelo nao encontrada. Gere com qualidade 'standard'.",
+                "modelo_id": modelo_id,
+            }, indent=2, ensure_ascii=False)
+        if not os.path.exists(blueprint_lateral_path):
+            return json.dumps({"success": False, "error": f"Blueprint nao encontrado: {blueprint_lateral_path}"}, indent=2)
+
+        length = float(length_mm or 0)
+        if length <= 0:
+            try:
+                rep = read_report(modelo_id)
+                length = float(rep["spec"]["dimensions"]["length"])
+            except Exception:
+                return json.dumps({"success": False, "error": "length_mm nao informado e nao foi possivel ler do report."}, indent=2)
+
+        rep = compare_side(our_sil, blueprint_lateral_path, length)
+        out_dir = Path(our_sil).parent
+        overlay_path = str(out_dir / "overlay_blueprint.png")
+        try:
+            draw_overlay(rep, overlay_path)
+        except Exception as exc:
+            overlay_path = f"(overlay falhou: {exc})"
+
+        result = public_report(rep)
+        result.update({
+            "success": True,
+            "modelo_id": modelo_id,
+            "length_mm": length,
+            "our_silhouette": our_sil,
+            "blueprint": blueprint_lateral_path,
+            "overlay": overlay_path,
+        })
+        return json.dumps(result, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        import traceback
+        return json.dumps({"success": False, "error": str(exc), "traceback": traceback.format_exc()}, indent=2, ensure_ascii=False)
+
+
 if __name__ == "__main__":
     mcp.run()

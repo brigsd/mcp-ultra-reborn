@@ -5,7 +5,7 @@ from pathlib import Path
 from vehicle_workspace.generators.blockout import generate_blockout
 from vehicle_workspace.generators.body_loft import generate_model
 from vehicle_workspace.generators.rig import generate_rig
-from vehicle_workspace.rendering.orthographic_views import render_views
+from vehicle_workspace.rendering.orthographic_views import render_silhouette, render_views
 from vehicle_workspace.validation.dimensions import audit_dimensions
 from vehicle_workspace.validation.symmetry import audit_symmetry
 from vehicle_workspace.validation.wheel_fitment import audit_wheel_fitment
@@ -71,6 +71,16 @@ def run_vehicle_action(action, spec_json, output_dir, quality="draft"):
     render_report = render_views(str(render_dir), resolution=900)
     if render_report.get("errors"):
         artifact_errors.append({"stage": "render", "errors": render_report["errors"]})
+
+    silhouette = {}
+    if action == "model" and quality in {"standard", "high"}:
+        sil = render_silhouette(str(render_dir), view="lado", resolution=1100)
+        if sil.get("error"):
+            artifact_errors.append({"stage": "silhouette", "error": sil["error"]})
+        else:
+            silhouette = {"lado": sil["path"]}
+            render_report["renders"]["silhouette_lado"] = sil["path"]
+
     audit_report = _audit(spec) if action in {"blockout", "model"} else {}
 
     blend_path = output / "scene.blend"
@@ -87,6 +97,7 @@ def run_vehicle_action(action, spec_json, output_dir, quality="draft"):
         "generation": generation,
         "audit": audit_report,
         "renders": render_report["renders"],
+        "silhouette": silhouette,
         "artifact_errors": artifact_errors,
         "paths": {
             "output_dir": str(output),
