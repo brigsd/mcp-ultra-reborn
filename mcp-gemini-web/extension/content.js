@@ -132,6 +132,30 @@ function limparResposta(text) {
   return (text || "").replace(/^\s*O Gemini (disse|respondeu)\s*/i, "").trim();
 }
 
+function extrairInfoResposta(resp, text) {
+  const cleanText = limparResposta(text);
+  if (!resp) return cleanText;
+  
+  // Encontra todas as imagens geradas na resposta
+  const imgs = Array.from(resp.querySelectorAll('generated-image img, single-image img, img[src^="http"], img[src^="blob:"]'))
+    .map((img) => img.src)
+    .filter((src) => {
+       if (!src) return false;
+       // Filtra icones/assets estaticos da UI do Google
+       if (src.includes("googleusercontent.com/assets/")) return false;
+       if (src.includes("gstatic.com")) return false;
+       return true;
+    });
+    
+  const uniqueImgs = Array.from(new Set(imgs));
+  
+  if (uniqueImgs.length > 0) {
+    const urlsText = uniqueImgs.map((url) => `- ${url}`).join("\n");
+    return `${cleanText}\n\n[Imagens Geradas]:\n${urlsText}`;
+  }
+  return cleanText;
+}
+
 // Core: espera getResp() estabilizar. isStart() decide quando a geracao "comecou"
 // (pra nao aceitar texto antigo). Pronto = texto estavel por idleMs E (acoes da
 // resposta presentes OU geracao terminada).
@@ -153,14 +177,14 @@ async function aguardarResposta(getResp, isStart, opts = {}) {
     const pronto = started && (done || !gerando);
     if (resp && text && text === last && pronto) {
       if (!stableSince) stableSince = Date.now();
-      if (Date.now() - stableSince >= idleMs) return limparResposta(text);
+      if (Date.now() - stableSince >= idleMs) return extrairInfoResposta(resp, text);
     } else {
       stableSince = 0;
       last = text;
     }
     await sleep(200);
   }
-  if (last) return limparResposta(last);
+  if (last) return extrairInfoResposta(getResp(), last);
   throw new Error("Tempo esgotado esperando a resposta do Gemini.");
 }
 
