@@ -13,6 +13,7 @@ Ferramentas:
 """
 
 import asyncio
+import difflib
 import os
 import re
 from contextlib import asynccontextmanager
@@ -106,16 +107,28 @@ def build_server():
 
     @mcp.tool()
     async def gemini_status() -> str:
-        """Diz se a extensao do Chrome esta conectada ao MCP."""
+        """Verifica se a extensao do Chrome esta conectada ao servidor MCP.
+
+        Chame PRIMEIRO antes de qualquer outra ferramenta. Se retornar
+        'desconectada', a aba do Gemini nao esta aberta ou a extensao nao esta
+        carregada — nenhuma outra ferramenta vai funcionar ate isso ser resolvido.
+        Nao tente enviar tarefas com a extensao desconectada.
+        """
         return "conectada" if (bridge and bridge.connected) else "desconectada"
 
     @mcp.tool()
     async def pergunta_gemini(tarefa: str, timeout: int = 180) -> str:
-        """Manda uma tarefa nova pro Gemini web (one-shot) e devolve a resposta.
+        """Envia uma tarefa avulsa ao Gemini e devolve a resposta (one-shot).
+
+        Use para perguntas isoladas que nao precisam de contexto fixo.
+        Para uso repetido com o mesmo papel/instrucoes, prefira o par
+        configurar_gemini + consultar_gemini (contexto estavel, sem historico
+        acumulado). Para processar arquivos sem gastar tokens do host, use
+        processar_arquivo_gemini ou editar_arquivo_gemini.
 
         Args:
-            tarefa: o texto/prompt a colar no Gemini.
-            timeout: segundos a esperar pela resposta.
+            tarefa: o texto completo do prompt a enviar ao Gemini.
+            timeout: segundos a aguardar a resposta (padrao 180).
         """
         if bridge is None:
             raise RuntimeError("Bridge nao iniciada.")
@@ -125,12 +138,24 @@ def build_server():
     async def selecionar_modelo_gemini(
         modelo: str, raciocinio: str | None = None
     ) -> str:
-        """Seleciona o modelo do Gemini e, opcionalmente, o nivel de raciocinio.
+        """Troca o modelo ativo do Gemini e, opcionalmente, o nivel de raciocinio.
+
+        Use quando quiser mudar o modelo sem abrir um chat novo (ex.: trocou de
+        flash para pro no meio de uma sessao). Se estiver abrindo um chat novo,
+        prefira passar modelo/raciocinio diretamente no configurar_gemini.
+
+        Modelos disponiveis:
+            'flash-lite' → Gemini 3.1 Flash-Lite  (rapido, economico)
+            'flash'      → Gemini 3.5 Flash        (equilibrado, recomendado)
+            'pro'        → Gemini 3.1 Pro           (mais capaz, mais lento)
+
+        Niveis de raciocinio (nem todo modelo suporta):
+            'padrao'    → raciocinio normal
+            'estendido' → raciocinio mais profundo (mais lento)
 
         Args:
-            modelo: 'flash-lite' (3.1 Flash-Lite), 'flash' (3.5 Flash) ou
-                'pro' (3.1 Pro).
-            raciocinio: 'padrao' ou 'estendido' (opcional; nem todo modelo tem).
+            modelo: 'flash-lite', 'flash' ou 'pro'.
+            raciocinio: 'padrao' ou 'estendido' (opcional).
         """
         if bridge is None:
             raise RuntimeError("Bridge nao iniciada.")
@@ -147,16 +172,22 @@ def build_server():
         raciocinio: str | None = None,
         timeout: int = 180,
     ) -> str:
-        """Abre um chat novo e fixa a 1a mensagem como configuracao (system prompt).
+        """Abre um chat novo no Gemini e fixa a 1a mensagem como system prompt.
 
-        Depois disso, use `consultar_gemini` pra fazer as chamadas: ele edita a 2a
-        mensagem a cada vez, mantendo o contexto em config + pergunta atual.
+        DEVE ser chamado antes de consultar_gemini. Abre um chat limpo, escolhe
+        o modelo/raciocinio e cola `config` como a primeira mensagem (o papel e
+        as instrucoes do agente). A partir dai, use consultar_gemini para cada
+        chamada: ele edita a 2a mensagem e regenera, mantendo o contexto em
+        'config + tarefa atual' sem acumular historico.
+
+        Nao use para tarefas avulsas — use pergunta_gemini. Nao use para
+        processar arquivos — use processar_arquivo_gemini ou editar_arquivo_gemini.
 
         Args:
-            config: a mensagem de configuracao (papel/instrucoes do agente).
-            modelo: opcional, escolhe o modelo antes de configurar.
-            raciocinio: opcional, 'padrao' ou 'estendido'.
-            timeout: segundos a esperar pela resposta de confirmacao.
+            config: instrucoes do agente (system prompt fixo para toda a sessao).
+            modelo: 'flash-lite', 'flash' ou 'pro' (opcional; mantem o atual se omitido).
+            raciocinio: 'padrao' ou 'estendido' (opcional).
+            timeout: segundos a aguardar confirmacao (padrao 180).
         """
         if bridge is None:
             raise RuntimeError("Bridge nao iniciada.")
@@ -169,16 +200,17 @@ def build_server():
 
     @mcp.tool()
     async def inspecionar_gemini(seletor: str = "", max: int = 40) -> str:
-        """Diagnostico: descreve o DOM real do Gemini pra calibrar seletores.
+        """DIAGNOSTICO APENAS — descreve o DOM do Gemini para recalibrar seletores.
 
-        Sem `seletor`, devolve um panorama (elementos interativos com aria-label e
-        inventario de custom elements). Com `seletor`, descreve os elementos que
-        casam. Ferramenta de diagnostico, de uso excepcional: so pra recalibrar os
-        seletores quando a interface do Gemini mudar, nao pra operacao normal.
+        Use SOMENTE quando outra ferramenta parou de funcionar apos uma atualizacao
+        do Google e precisar redescobrir os seletores CSS no extension/content.js.
+        Nao use na operacao normal: despeja o DOM inteiro e e caro. Para listar
+        conversas, use listar_conversas_gemini. Para qualquer outra operacao,
+        use as ferramentas especificas.
 
         Args:
-            seletor: um seletor CSS pra inspecionar (vazio = panorama geral).
-            max: maximo de elementos descritos.
+            seletor: seletor CSS a inspecionar (vazio = panorama geral do DOM).
+            max: maximo de elementos retornados (padrao 40).
         """
         if bridge is None:
             raise RuntimeError("Bridge nao iniciada.")
@@ -187,15 +219,19 @@ def build_server():
 
     @mcp.tool()
     async def consultar_gemini(tarefa: str, timeout: int = 180) -> str:
-        """Chamada "API": edita a 2a mensagem do chat e le a resposta regenerada.
+        """Envia uma tarefa ao Gemini dentro de uma sessao configurada (estilo API).
 
-        Na primeira vez apos `configurar_gemini`, cria a mensagem de trabalho; nas
-        seguintes, reescreve essa mesma mensagem (o contexto nao cresce). Requer
-        ter chamado `configurar_gemini` antes pra haver a 1a mensagem fixa.
+        REQUER que configurar_gemini tenha sido chamado antes nesta sessao.
+        Edita a 2a mensagem do chat (na primeira vez cria, nas seguintes reescreve)
+        e le a resposta regenerada. O contexto permanece em 'config + tarefa atual':
+        nao acumula historico, cada chamada e independente.
+
+        Para tarefas avulsas sem sessao: use pergunta_gemini.
+        Para processar arquivos: use processar_arquivo_gemini ou editar_arquivo_gemini.
 
         Args:
-            tarefa: o texto/prompt da chamada atual.
-            timeout: segundos a esperar pela resposta.
+            tarefa: o prompt da chamada atual (substitui a mensagem anterior).
+            timeout: segundos a aguardar a resposta (padrao 180).
         """
         if bridge is None:
             raise RuntimeError("Bridge nao iniciada.")
@@ -203,17 +239,17 @@ def build_server():
 
     @mcp.tool()
     async def listar_conversas_gemini() -> str:
-        """Lista as conversas recentes da barra lateral do Gemini.
+        """Lista as conversas recentes do Gemini (barra lateral).
 
-        Devolve um JSON: [{"id": "<id>", "titulo": "<titulo>"}, ...]. O `id` e o
-        identificador estavel da conversa, o MESMO que aparece na URL
-        (gemini.google.com/app/<id>); guarde-o e use em `abrir_conversa_gemini`.
+        Retorna JSON: [{"id": "<id>", "titulo": "<titulo>"}, ...].
+        O 'id' e o identificador da URL (gemini.google.com/app/<id>) — use-o
+        em abrir_conversa_gemini para reabrir a conversa depois.
 
-        Abre a barra lateral sozinho se estiver fechada. A lista do Gemini e
-        virtualizada (scroll infinito), entao isto devolve as conversas
-        atualmente carregadas (as mais recentes), nao o historico inteiro.
-        Pressupoe a secao "Recentes" expandida. Retorno enxuto de proposito:
-        use isto, nao o `inspecionar_gemini` (que despeja o DOM e custa caro).
+        Limitacao: a lista e virtualizada (scroll infinito), entao retorna apenas
+        as conversas ja carregadas na barra (as mais recentes). Se a conversa que
+        voce quer nao aparecer, role a barra e chame de novo.
+
+        Nao use inspecionar_gemini para listar conversas — e muito mais caro.
         """
         if bridge is None:
             raise RuntimeError("Bridge nao iniciada.")
@@ -221,16 +257,15 @@ def build_server():
 
     @mcp.tool()
     async def abrir_conversa_gemini(conversa_id: str) -> str:
-        """Abre uma conversa existente do Gemini pelo id e devolve a URL aberta.
+        """Abre uma conversa existente do Gemini pelo id e confirma a URL.
 
-        `conversa_id` e o identificador da URL (gemini.google.com/app/<id>),
-        tambem retornado por `listar_conversas_gemini`. Pegue o id de la; nao
-        ha como abrir por titulo (buscar por texto no DOM derruba a extensao).
+        Use o 'id' retornado por listar_conversas_gemini. Nao ha como abrir por
+        titulo — a identificacao e sempre pelo id da URL. Se o id nao estiver
+        carregado na barra lateral (lista virtualizada), liste de novo ou role a
+        barra antes de tentar.
 
-        Garante a barra lateral aberta, clica no link da conversa e confirma
-        pela URL, que volta como recibo. Operacao barata: nao despeja DOM. Se o
-        id nao estiver na lista carregada (virtualizada), falha avisando; nesse
-        caso liste de novo ou role a barra.
+        Args:
+            conversa_id: o id da conversa (parte final da URL: gemini.google.com/app/<id>).
         """
         if bridge is None:
             raise RuntimeError("Bridge nao iniciada.")
@@ -242,25 +277,27 @@ def build_server():
     async def editar_arquivo_gemini(
         caminho: str, instrucao: str, timeout: int = 300
     ) -> str:
-        """Delega ao Gemini a edicao de um arquivo, sem o conteudo passar pelo
-        contexto do host (economia de tokens).
+        """Pede ao Gemini que edite um arquivo e grava o resultado NO MESMO arquivo.
 
-        O servidor le o arquivo do disco, pede ao Gemini que aplique `instrucao`
-        e devolva o arquivo INTEIRO, e grava o resultado por cima. Nem o conteudo
-        original nem o editado voltam pro host: o retorno e so um status curto.
-        Para revisar: COMMITE o arquivo antes de editar e rode `git diff
-        <caminho>` depois (mais os testes). O git e a rede de seguranca; se o
-        resultado ficar ruim, reverta com `git restore <caminho>`.
+        O conteudo do arquivo nunca passa pelo contexto do host (zero tokens).
+        O servidor le o arquivo, manda pro Gemini com a instrucao, e sobrescreve
+        o arquivo com o resultado. O retorno e apenas um status curto (linhas antes
+        e depois). Use quando quer modificar o arquivo existente no lugar.
 
-        Limites: o Gemini ve so este arquivo, nao o resto do projeto, entao
-        mudancas que dependem de outros arquivos podem sair erradas (os testes
-        pegam). Arquivo muito grande pode truncar na saida do Gemini; o status
-        avisa se o arquivo encolheu demais. Use para mudancas locais a um arquivo.
+        Para gerar uma versao alternativa SEM alterar o original, use
+        processar_arquivo_gemini (grava em arquivo de destino separado e retorna
+        o diff automaticamente).
+
+        IMPORTANTE: commite o arquivo antes de editar. Se o resultado for ruim,
+        reverta com: git restore <caminho>
+
+        Limites: o Gemini ve so este arquivo, sem contexto do resto do projeto.
+        Arquivos muito grandes podem truncar; o status avisa se encolheu demais.
 
         Args:
-            caminho: caminho absoluto do arquivo existente a editar.
+            caminho: caminho absoluto do arquivo a editar (sera sobrescrito).
             instrucao: o que mudar, em linguagem natural.
-            timeout: segundos a esperar a resposta do Gemini (padrao 300).
+            timeout: segundos a aguardar o Gemini (padrao 300).
         """
         if bridge is None:
             raise RuntimeError("Bridge nao iniciada.")
@@ -293,6 +330,69 @@ def build_server():
         return (
             f"gravado: {caminho} ({n_old} -> {n_new} linhas)."
             f"{aviso} Revise com: git diff -- {caminho}"
+        )
+
+    @mcp.tool()
+    async def processar_arquivo_gemini(
+        arquivo_origem: str,
+        instrucao: str,
+        arquivo_destino: str,
+        timeout: int = 300,
+    ) -> str:
+        """Le um arquivo, processa com o Gemini e grava o resultado num arquivo NOVO.
+
+        Fluxo completamente server-side: o conteudo do arquivo nunca passa pelo
+        contexto do host (zero tokens). O servidor le o arquivo de origem, manda
+        pro Gemini com a instrucao, grava o resultado no arquivo de destino, calcula
+        o diff entre os dois e retorna APENAS o diff — nao os arquivos completos.
+
+        Use para: reescrever, expandir, traduzir, resumir ou transformar documentos.
+        O arquivo de origem nunca e alterado.
+
+        Diferenca de editar_arquivo_gemini: aqui o original e preservado e o
+        resultado vai para um arquivo separado. O diff e calculado e retornado
+        automaticamente — o host nao precisa ler nenhum dos dois arquivos.
+
+        Args:
+            arquivo_origem:  caminho absoluto do arquivo a processar (nao alterado).
+            instrucao:       o que o Gemini deve fazer com o conteudo.
+            arquivo_destino: caminho absoluto do novo arquivo a criar com o resultado.
+            timeout:         segundos a aguardar o Gemini (padrao 300).
+        """
+        if bridge is None:
+            raise RuntimeError("Bridge nao iniciada.")
+        p_origem = Path(arquivo_origem)
+        if not p_origem.is_file():
+            raise RuntimeError(f"Arquivo nao encontrado: {arquivo_origem}")
+        conteudo = p_origem.read_text(encoding="utf-8")
+        prompt = (
+            f"Voce recebeu o arquivo `{p_origem.name}`. Aplique esta instrucao:\n\n"
+            f"{instrucao}\n\n"
+            "Devolva o resultado COMPLETO dentro de UM unico bloco de codigo "
+            "cercado por crases triplas. Nao escreva nada antes nem depois do bloco.\n\n"
+            f"```\n{conteudo}\n```"
+        )
+        resp = await bridge.ask(prompt, timeout=timeout)
+        resultado = _extrai_codigo(resp)
+        if not resultado.strip():
+            raise RuntimeError("Gemini devolveu vazio; nada foi gravado.")
+        p_destino = Path(arquivo_destino)
+        p_destino.parent.mkdir(parents=True, exist_ok=True)
+        p_destino.write_text(resultado, encoding="utf-8")
+        n_orig = conteudo.count("\n") + 1
+        n_dest = resultado.count("\n") + 1
+        diff_linhas = list(difflib.unified_diff(
+            conteudo.splitlines(keepends=True),
+            resultado.splitlines(keepends=True),
+            fromfile=p_origem.name,
+            tofile=p_destino.name,
+            n=2,
+        ))
+        diff_texto = "".join(diff_linhas[:200])  # cap: primeiras 200 linhas do diff
+        truncado = " [diff truncado em 200 linhas]" if len(diff_linhas) > 200 else ""
+        return (
+            f"gravado: {arquivo_destino} ({n_orig} -> {n_dest} linhas){truncado}\n\n"
+            f"--- diff ---\n{diff_texto if diff_texto else '(sem diferencas)'}"
         )
 
     return mcp

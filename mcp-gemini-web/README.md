@@ -19,16 +19,18 @@ executa a ação no DOM e devolve o resultado, casado ao pedido por um identific
 
 ## Ferramentas
 
-| Ferramenta | O que faz |
+| Ferramenta | Quando usar |
 |---|---|
-| `gemini_status()` | Diz se a extensão está `conectada`. |
-| `pergunta_gemini(tarefa)` | Envia uma tarefa nova (one-shot) e devolve a resposta. |
-| `selecionar_modelo_gemini(modelo, raciocinio)` | Escolhe o modelo (`flash-lite`, `flash`, `pro`) e, opcionalmente, o raciocínio (`padrao`, `estendido`). |
-| `configurar_gemini(config, modelo, raciocinio)` | Abre um chat novo, escolhe modelo/raciocínio e fixa a 1ª mensagem como configuração. |
-| `consultar_gemini(tarefa)` | Chamada estilo API: edita a 2ª mensagem e devolve a resposta regenerada. |
-| `listar_conversas_gemini()` | Lista as conversas recentes da barra lateral (título + id), em JSON. |
-| `abrir_conversa_gemini(conversa_id)` | Abre uma conversa pelo id e devolve a URL aberta. |
-| `inspecionar_gemini(seletor)` | Diagnóstico de DOM. Uso excepcional (ver abaixo). |
+| `gemini_status()` | **Sempre primeiro.** Confirma se a extensão está `conectada` antes de qualquer outra chamada. |
+| `pergunta_gemini(tarefa)` | Tarefa avulsa sem contexto fixo. Uma chamada, uma resposta. |
+| `configurar_gemini(config, modelo, raciocinio)` | Inicia sessão estilo API: abre chat novo e fixa o system prompt. Chame antes de `consultar_gemini`. |
+| `consultar_gemini(tarefa)` | Chamada dentro de sessão configurada: edita a 2ª mensagem e regenera. Requer `configurar_gemini` antes. |
+| `selecionar_modelo_gemini(modelo, raciocinio)` | Troca o modelo no meio de uma sessão. Se estiver abrindo chat novo, prefira passar o modelo no `configurar_gemini`. |
+| `editar_arquivo_gemini(caminho, instrucao)` | Gemini edita um arquivo e grava **no mesmo arquivo**. Conteúdo não passa pelo host. Commite antes; reverta com `git restore` se precisar. |
+| `processar_arquivo_gemini(arquivo_origem, instrucao, arquivo_destino)` | Gemini processa um arquivo e grava o resultado em **arquivo separado**. Retorna o diff — o host não lê nenhum dos dois arquivos. Ideal para reescrever/expandir documentos. |
+| `listar_conversas_gemini()` | Lista conversas recentes da barra lateral (título + id em JSON). |
+| `abrir_conversa_gemini(conversa_id)` | Abre uma conversa pelo id (da URL) e confirma a URL aberta. |
+| `inspecionar_gemini(seletor)` | **Diagnóstico apenas.** Descreve o DOM para recalibrar seletores quando a UI do Gemini mudar. Não use na operação normal. |
 
 ## O fluxo "API" (configurar + consultar)
 
@@ -65,6 +67,26 @@ histórico inteiro. E `abrir` encontra a conversa por id no DOM; se ela não
 estiver no trecho carregado, falha avisando, e aí é rolar a barra ou listar de
 novo. A identificação é sempre por id ou seletor CSS, nunca por texto, porque
 buscar a conversa pelo título derrubou o content script nos testes.
+
+## Se as ferramentas não aparecerem no host
+
+O servidor HTTP precisa estar rodando antes de o host tentar conectar. Se
+`gemini_status()` não aparecer como ferramenta disponível, inicie o servidor:
+
+```bash
+# Da raiz do repositório:
+powershell -ExecutionPolicy Bypass -File scripts/start-http.ps1
+```
+
+Ou manualmente só o gemini-web:
+
+```powershell
+$env:GEMINI_TRANSPORT = "http"
+python mcp-gemini-web\gemini_mcp.py
+```
+
+Aguarde ~3 segundos e recarregue o host. O servidor sobrevive a reloads do
+Claude Code — só cai se o terminal for fechado.
 
 ## Rodar e instalar
 
