@@ -29,7 +29,26 @@ function connect() {
     if (msg.type === "ping") return;        // so pra manter o worker acordado
     if (!ACTIONS.includes(msg.type)) return;
     try {
-      const text = await runOnGemini(msg);
+      let text = await runOnGemini(msg);
+      if (msg.type === "gerar_imagem") {
+        try {
+          const data = JSON.parse(text);
+          const imgs = [];
+          for (const url of (data.urls || [])) {
+            console.log("[gemini-web] Baixando no background:", url);
+            const base64 = await baixarImagemBase64(url);
+            if (base64) {
+              imgs.push({ url, base64 });
+            }
+          }
+          text = JSON.stringify({
+            text: data.text,
+            images: imgs
+          });
+        } catch (e) {
+          console.error("[gemini-web] Falha ao processar imagens no background:", e);
+        }
+      }
       send({ type: "answer", id: msg.id, text });
     } catch (e) {
       send({ type: "error", id: msg.id, message: String((e && e.message) || e) });
@@ -98,3 +117,25 @@ chrome.runtime.onStartup.addListener(ensureConnected);
 chrome.runtime.onInstalled.addListener(ensureConnected);
 
 ensureConnected();
+
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+async function baixarImagemBase64(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const buffer = await r.arrayBuffer();
+    return arrayBufferToBase64(buffer);
+  } catch (e) {
+    console.error("[gemini-web] Erro ao baixar imagem no background:", e);
+    return null;
+  }
+}
