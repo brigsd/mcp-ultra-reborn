@@ -26,6 +26,7 @@ window.__qwen = (function () {
       modelSelector: '[class*="model-selector"]',
       modelItem: '[class*="model-item"]',
       modelItemName: '[class*="model-item-name"]',
+      viewMore: '[class*="view-more"]',
       novaConversa: '.sidebar-entry-fixed-list-content',
       novaConversaAlt: '.sidebar-entry-fixed-list',
     };
@@ -166,6 +167,14 @@ window.__qwen = (function () {
       },
       modelosDisponiveis() {
         return qa(SEL.modelItemName).filter(vis).map((n) => norm(n.innerText)).filter(Boolean);
+      },
+      centroExpandirModelos() {
+        let el = q(SEL.viewMore);
+        if (!el) {
+          const all = qa('div, span, button');
+          el = all.find(x => x.innerText && x.innerText.includes("Expandir"));
+        }
+        return centro(el);
       },
 
       // ---- nova conversa ----

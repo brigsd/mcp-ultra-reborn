@@ -1,0 +1,38 @@
+[mcp_servers.deepseek-web]
+command = 'C:\Users\tiago\Desktop\mcp-ultra-reborn\.venv\Scripts\python.exe'
+args = ['C:\Users\tiago\Desktop\mcp-ultra-reborn\mcp-deepseek-web\deepseek_mcp.py']
+
+[mcp_servers.gemini-web]
+command = 'C:\Users\tiago\Desktop\mcp-ultra-reborn\.venv\Scripts\python.exe'
+args = ['C:\Users\tiago\Desktop\mcp-ultra-reborn\mcp-gemini-web\gemini_mcp.py']
+
+[mcp_servers.gemini-web.tools.reconectar_gemini]
+approval_mode = "approve"
+
+[mcp_servers.gemini-web.tools.pergunta_gemini]
+approval_mode = "approve"
+
+[mcp_servers.geracao-3d]
+command = 'C:\Users\tiago\Desktop\mcp-ultra-reborn\.venv\Scripts\python.exe'
+args = ['C:\Users\tiago\Desktop\mcp-ultra-reborn\mcp-geracao-objetos-3d\geracao_3d_mcp.py']
+
+[mcp_servers.geracao-3d.tools.status_blender_bridge]
+approval_mode = "approve"
+
+[mcp_servers.ia-local]
+command = 'C:\Users\tiago\Desktop\mcp-ultra-reborn\.venv\Scripts\python.exe'
+args = [
+    "-m",
+    "mcp_qwen_coder.server",
+]
+
+[mcp_servers.ia-local.env]
+MCP_SHELL = "auto"
+
+[mcp_servers.qwen-controller]
+command = 'C:\Users\tiago\Desktop\mcp-ultra-reborn\.venv\Scripts\python.exe'
+args = ['C:\Users\tiago\Desktop\mcp-ultra-reborn\mcp-qwen-controller\qwen_mcp.py']
+
+[mcp_servers.qwen-controller.env]
+QWEN_CDP_HOST = "127.0.0.1"
+QWEN_CDP_PORT = "9222"

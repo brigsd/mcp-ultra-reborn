@@ -118,4 +118,31 @@ def build_server():
             raise RuntimeError("Controller nao iniciado.")
         return await qwen.inspecionar(seletor, max)
 
+    @mcp.tool()
+    async def delegar_para_subagente(
+        tarefa: str, subagente_port: int = 8781, timeout: int = 180
+    ) -> str:
+        """Envia uma tarefa para uma instância secundária do Qwen Chat Desktop (subagente)
+        rodando em uma porta HTTP específica e devolve a resposta final.
+
+        Args:
+            tarefa: o prompt/instrução a ser executado pelo subagente.
+            subagente_port: a porta HTTP da instância do subagente (ex: 8781).
+            timeout: segundos a esperar pela resposta.
+        """
+        host = os.environ.get("QWEN_CDP_HOST", "127.0.0.1")
+        # O construtor calcula a porta CDP automaticamente a partir da porta HTTP
+        sub_qwen = Qwen(host, http_port=subagente_port)
+        
+        status = await sub_qwen.status()
+        if status != "conectado":
+            await sub_qwen.cdp.close()
+            raise RuntimeError(f"Subagente na porta HTTP {subagente_port} nao esta acessivel (status: {status}).")
+            
+        try:
+            res = await sub_qwen.ask(tarefa, timeout=timeout)
+            return res
+        finally:
+            await sub_qwen.cdp.close()
+
     return mcp
