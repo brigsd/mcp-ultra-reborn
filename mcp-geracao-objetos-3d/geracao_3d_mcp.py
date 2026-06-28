@@ -30,7 +30,7 @@ async def status_blender_bridge() -> str:
     """
     try:
         conectado = testar_conexao()
-        return "conectada" if conectado else "desconectada (inicie o Blender e ative a Larperian Bridge na barra lateral)"
+        return "conectada" if conectado else "desconectada (inicie o Blender e ative a MCP 3D Bridge no painel lateral)"
     except Exception as e:
         return f"desconectada: {e}"
 

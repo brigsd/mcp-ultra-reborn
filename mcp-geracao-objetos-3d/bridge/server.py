@@ -1,10 +1,10 @@
 bl_info = {
-    "name": "Larperian Blender Bridge",
-    "author": "Larperian",
+    "name": "MCP 3D Object Generation Bridge",
+    "author": "MCP 3D",
     "version": (3, 0),
     "blender": (3, 2, 0),
-    "location": "View3D > Sidebar > Larperian",
-    "description": "Bridge com feedback rico: 4 vistas ortográficas, métricas e descrição da cena.",
+    "location": "View3D > Sidebar > MCP 3D",
+    "description": "Addon de ponte HTTP para o servidor MCP de Geração de Objetos 3D.",
     "category": "Development",
 }
 
@@ -373,7 +373,7 @@ def iniciar_servidor():
     _thread_servidor.start()
     if not bpy.app.timers.is_registered(_processar_fila):
         bpy.app.timers.register(_processar_fila)
-    print("Larperian Bridge v3: ativo em http://localhost:19000")
+    print("MCP 3D Bridge: ativo em http://localhost:19000")
     print("  POST /       → executa script  (retorna métricas + 4 screenshots)")
     print("  GET  /cena   → descreve cena   (retorna texto)")
 
@@ -410,11 +410,11 @@ class LARPERIAN_OT_Stop(bpy.types.Operator):
 
 
 class LARPERIAN_PT_Panel(bpy.types.Panel):
-    bl_label       = "Larperian Bridge"
+    bl_label       = "MCP 3D Bridge"
     bl_idname      = "LARPERIAN_PT_Panel"
     bl_space_type  = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category    = "Larperian"
+    bl_category    = "MCP 3D"
 
     def draw(self, context):
         box = self.layout.box()
