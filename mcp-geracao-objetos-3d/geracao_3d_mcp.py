@@ -316,10 +316,12 @@ except Exception as e:
         _shutil.copy2(path_script, str(debug_script_path))
         
         # Executa geração no Blender headless
-        # Usa PIPE com communicate() — seguro para qualquer volume de output no Windows
+        # stdin=DEVNULL evita que o Blender fique aguardando input sem TTY no Windows
         proc_gen = subprocess.Popen(
             [blender_path, "--background", "--python", path_script],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW
         )
         try:
             gen_output_bytes, _ = proc_gen.communicate(timeout=180)
@@ -345,7 +347,9 @@ except Exception as e:
         render_script = ROOT / "prototype" / "render_views.py"
         proc_render = subprocess.Popen(
             [blender_path, "--background", "--python", str(render_script), "--", path_stl],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW
         )
         try:
             render_output_bytes, _ = proc_render.communicate(timeout=180)
