@@ -1,53 +1,70 @@
-# Larperian
+# MCP Geração Objetos 3D (ex-Larperian)
 
-Framework para uma IA gerar objetos 3D no Blender com **precisão geométrica** (forma, proporção,
-topologia — não textura). A ideia central não é a IA "acertar de primeira", e sim um **loop fechado**:
-gerar → executar no Blender → renderizar e medir → auditar em camadas → corrigir → repetir.
+Framework para uma IA gerar objetos 3D no Blender com **precisão geométrica** (forma, proporção, topologia). Agora integrado como um servidor MCP global (`geracao-3d`) usando FastMCP.
 
-> **Status: fase de planejamento/arquitetura.** A pesquisa de fundação está feita e consolidada;
-> a implementação da nova arquitetura (runner headless, B-rep no mecânico, verificador isolado) ainda
-> não começou. O código atual em `bridge/`, `api/`, etc. é da primeira versão e será revisado.
+O sistema funciona em **loop fechado**:
+1. O agente solicita a geração de uma peça pelo MCP.
+2. O servidor executa a geração no Blender (via GUI Bridge ou Headless).
+3. O Blender exporta o STL e gera 4 renders ortográficos (Perspectiva, Frente, Lado, Topo).
+4. O agente analisa o resultado visual e geométrico, podendo iterar ou corrigir parâmetros.
 
-## Por onde começar
+---
 
-1. **[docs/plano_mestre.md](docs/plano_mestre.md)** — a visão de topo consolidada: o mapa conectivo
-   (espinha, ponte, geradores, verificadores), as decisões, o que é falso achado, e as frentes abertas.
-   **Comece por aqui.**
-2. **[docs/teardown_plano_mestre.md](docs/teardown_plano_mestre.md)** — a verificação adversarial que
-   atacou o plano e mudou coisa de fundação (B-rep como fonte-de-verdade no mecânico, verificador isolado).
+## Status da Implementação
 
-## A ideia em uma frase
+* **Servidor FastMCP (`geracao-3d`)**: Totalmente implementado e registrado no Antigravity.
+* **Addon Blender atualizado**: Renomeado para *MCP 3D Object Generation Bridge* (evitando conflitos com nomes antigos).
+* **Dual Execution Mode**:
+  * **Modo Bridge GUI**: Se o Blender estiver aberto com o addon ativo, a geração roda instantaneamente na interface gráfica via requisições HTTP (porta `8007`).
+  * **Modo Headless Fallback**: Se o Blender estiver fechado, o servidor inicia um processo em background do Blender, gera o objeto, exporta em STL, renderiza as 4 vistas usando o script de renderização (`render_views.py`) e retorna tudo em segundos.
+* **Correções no Windows**: 
+  * **Deadlock de buffer (Pipe)**: Corrigido substituindo redirecionamento direto de logs por arquivos temporários e uso seguro de `Popen.communicate()`.
+  * **Janelas Fantasmas**: Corrigido utilizando a flag `CREATE_NO_WINDOW` e `stdin=DEVNULL` no Windows, impedindo que o Blender em background aguarde input do terminal de forma invisível.
+  * **Blender Context**: Corrigido bug de `NoneType` em `bpy.context.collection` ao rodar em modo silencioso (fallback automático para a coleção principal da cena).
 
-Mecânico = código paramétrico/B-rep (precisão por construção, verificada por kernel e asserções
-ancoradas). Orgânico = SDF (signed distance functions, lib `sdf` do Fogleman; L-System como sub-caso),
-verificado por validade + estrutura + plausibilidade. Os dois penduram numa espinha única: o loop de
-verificação em camadas, com 1 verificador por modo de falha (validade ≠ fidelidade ≠ estrutura ≠
-percepção).
+---
 
-## Mapa dos documentos
+## Ferramentas Disponíveis no MCP
 
-| Documento | Para quê |
-|---|---|
-| [plano_mestre.md](docs/plano_mestre.md) | **Entrada.** Visão de topo, mapa conectivo, decisões, frentes abertas. |
-| [teardown_plano_mestre.md](docs/teardown_plano_mestre.md) | Verificação adversarial do plano (o que quebra e os ajustes). |
-| [rascunho_ideias.md](docs/rascunho_ideias.md) | Caderno de ideias soltas por frente (ponte, motor, verificação). |
-| [pesquisa_ia_3d.md](docs/pesquisa_ia_3d.md) | Como uma IA gera 3D com precisão (representações, loop, papers). |
-| [panorama_ferramentas_ia_3d.md](docs/panorama_ferramentas_ia_3d.md) | O que já existe pronto (frameworks/MCPs/sandboxes). |
-| [pesquisa_prova_forma.md](docs/pesquisa_prova_forma.md) | Dá pra PROVAR que uma forma está correta? |
-| [verificadores_plugaveis.md](docs/verificadores_plugaveis.md) | Bibliotecas concretas de verificação (pip), por camada. |
-| [pesquisa_spec_e_geracao.md](docs/pesquisa_spec_e_geracao.md) | A entrada: spec-como-contrato, roteação, desambiguação, autoria de geradores, B-rep→Blender. |
-| [pesquisa_grafo_procedural.md](docs/pesquisa_grafo_procedural.md) | Família mapa-procedural-editável: Proc3D (fora), ProcGen3D (baixa), ShapeCraft (blueprint promissor). |
-| [gerador_3d_neural.md](docs/gerador_3d_neural.md) | Estudo pessoal do usuário (imagem→3D via TRELLIS.2), **à parte e fora do projeto**. Só registro. |
-| [objetivo.md](docs/objetivo.md) | Objetivo e escopo do projeto. |
-| [como_usar.md](docs/como_usar.md) | ⚠️ Legado — descreve a ponte antiga. |
-| [protocols/](protocols/) | ⚠️ Legado — protocolos da v1, a reescrever. |
+### 1. `status_blender_bridge`
+Verifica se o Blender GUI está aberto com a bridge ativa ou se a execução será direcionada para o modo Headless.
 
-## Estrutura do código (v1, em revisão)
+### 2. `gerar_modelo_3d(peca: str, parametros_json: str = "{}")`
+Gera uma peça 3D (ex: `arvore_lowpoly`, `disco_freio`) enviando parâmetros personalizáveis. Retorna os caminhos dos renders gerados e o STL.
 
-- `bridge/` — ponte addon+HTTP (será substituída por runner headless).
-- `api/` — DSL de geometria sobre bmesh (conceito sobrevive).
-- `catalog/` — dimensões mecânicas reais.
-- `references/` — referências técnicas (figuras de patente em domínio público; metadados).
-- `parts/`, `assembler.py` — exemplos (o brake_disc tem geometria a corrigir).
-- `client/`, `tools/` — cliente HTTP e utilitários.
-- `gerador_3d/` — estudo pessoal do usuário, **à parte e fora do projeto** (caminho neural; só os docs versionados). Ver [docs/gerador_3d_neural.md](docs/gerador_3d_neural.md).
+### 3. `obter_dimensoes_peca(peca: str)`
+Retorna especificações de dimensões, restrições e faixas de valores aceitáveis para os parâmetros de uma peça cadastrada no catálogo.
+
+### 4. `listar_referencias_locais()`
+Lista as referências técnicas de peças salvas localmente.
+
+### 5. `baixar_referencia_3d(peca: str, view: str = "perspectiva")`
+Faz o download ou localiza a imagem de referência técnica de uma determinada peça para comparação.
+
+---
+
+## Estrutura do Projeto
+
+* [geracao_3d_mcp.py](geracao_3d_mcp.py) — Ponto de entrada do servidor FastMCP. Controla a execução da bridge e o fallback headless.
+* [bridge/server.py](bridge/server.py) — Addon do Blender (TCP server local na porta `8007`).
+* [parts/](parts/) — Scripts de modelagem de peças individuais.
+  * [arvore_lowpoly.py](parts/arvore_lowpoly.py) — Gerador de árvore low-poly paramétrica usando o modificador Skin (pele limpa e facetada + folhagem icosférica).
+* [prototype/](prototype/) — Protótipos de geração e renderização rápida.
+  * [render_views.py](prototype/render_views.py) — Script chamado em headless para gerar as 4 imagens de câmera.
+* [catalog/](catalog/) — Regras geométricas de projeto.
+* [references/](references/) — Imagens de referência e renders finais salvos.
+
+---
+
+## Como Usar e Testar
+
+### Modo GUI (Recomendado para Desenvolvimento)
+1. Abra o Blender.
+2. Vá em **Edit > Preferences > Add-ons**, instale o arquivo [bridge/server.py](bridge/server.py) e ative o addon chamado **MCP 3D Object Generation Bridge**.
+3. Na barra lateral (tecla `N`), ative a Bridge (ela ficará verde sinalizando que está ouvindo na porta `8007`).
+4. Chame a ferramenta `gerar_modelo_3d(peca="arvore_lowpoly")` no chat. O objeto aparecerá instantaneamente na cena do seu Blender aberto.
+
+### Modo Headless (Automático se o Blender GUI estiver Fechado)
+1. Certifique-se de que o executável do Blender está configurado em seu sistema (caminho padrão para Steam/Windows já mapeado).
+2. Basta chamar a ferramenta `gerar_modelo_3d(peca="arvore_lowpoly")`. 
+3. O servidor cuidará de inicializar o Blender em background, rodar o script de modelagem, exportar, renderizar e disponibilizar os caminhos das imagens.
