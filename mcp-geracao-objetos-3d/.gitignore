@@ -33,3 +33,6 @@ references/bearing/ref_p*.png
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Outputs do gerador de veiculos (renders, .blend, gltf -- regeneraveis)
+vehicle_workspace/outputs/
