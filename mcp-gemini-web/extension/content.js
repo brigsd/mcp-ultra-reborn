@@ -222,8 +222,13 @@ async function handleAsk(prompt) {
 // ----------------------------------------------------------------------------
 
 async function configurarCriarImagem(habilitar) {
+  console.log("[gemini-web] configurarCriarImagem iniciada com habilitar =", habilitar);
   const menuBtn = q('button[aria-label="Envio e ferramentas"]');
   if (!menuBtn) throw new Error("Botao 'Envio e ferramentas' nao encontrado.");
+  
+  console.log("[gemini-web] abrindo menu Envio e ferramentas...");
+  dispatchHover(menuBtn);
+  await sleep(100);
   menuBtn.click();
   
   let targetBtn = null;
@@ -240,21 +245,29 @@ async function configurarCriarImagem(habilitar) {
   }
   
   const isChecked = targetBtn.getAttribute("aria-checked") === "true";
+  console.log("[gemini-web] Opcao Criar imagem encontrada. isChecked =", isChecked);
   
   if (habilitar && !isChecked) {
+    console.log("[gemini-web] ativando Criar imagem...");
+    dispatchHover(targetBtn);
+    await sleep(100);
     targetBtn.click();
     await sleep(400);
   } else if (!habilitar && isChecked) {
+    console.log("[gemini-web] desativando Criar imagem...");
+    dispatchHover(targetBtn);
+    await sleep(100);
     targetBtn.click();
     await sleep(400);
   } else {
+    console.log("[gemini-web] ja no estado correto. Fechando menu.");
     fecharMenu();
     await sleep(200);
   }
 }
 
 async function handleGerarImagem(prompt, imagemPrecisa) {
-  // Se for nulo/undefined, o padrao e true
+  console.log("[gemini-web] handleGerarImagem iniciada. prompt =", prompt, "imagemPrecisa =", imagemPrecisa);
   const habilitar = (imagemPrecisa === undefined || imagemPrecisa === null) ? true : !!imagemPrecisa;
 
   // 1. Configurar opcao "Criar imagem"
@@ -265,15 +278,18 @@ async function handleGerarImagem(prompt, imagemPrecisa) {
   const picker = q(SEL.modePicker);
   const currentText = picker ? (picker.innerText || "").toLowerCase() : "";
   const targetRac = habilitar ? "estendido" : "padrão";
+  console.log("[gemini-web] Verificando modo de raciocinio. Atual =", currentText, "Desejado =", targetRac);
   
   if (!currentText.includes(targetRac)) {
+    console.log("[gemini-web] Mudando raciocinio para:", habilitar ? "Estendido" : "Padrão");
     await handleSelecionarModelo(null, habilitar ? "Estendido" : "Padrão");
     await sleep(300);
   }
 
-  // 3. Enviar prompt
+  console.log("[gemini-web] Enviando prompt...");
   return await handleAsk(prompt);
 }
+
 
 // ----------------------------------------------------------------------------
 // Selecao de modelo + nivel de raciocinio
