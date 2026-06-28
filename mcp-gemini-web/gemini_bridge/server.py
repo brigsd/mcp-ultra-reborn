@@ -93,9 +93,14 @@ async def ensure_bridge() -> Bridge:
 
 @asynccontextmanager
 async def _lifespan(_server):
-    # Garante a bridge de pe (idempotente). Nao a derruba no teardown: e singleton
-    # do processo e pode ser compartilhada por varias sessoes (HTTP).
-    await ensure_bridge()
+    # Tenta subir a bridge no startup. Se falhar (ex.: porta ainda ocupada por
+    # processo anterior), o servidor sobe mesmo assim e as ferramentas ficam
+    # disponiveis — a bridge vai tentar de novo na primeira chamada a ensure_bridge().
+    try:
+        await ensure_bridge()
+    except Exception as exc:
+        import sys
+        print(f"[gemini-web] bridge nao iniciou no startup: {exc}", file=sys.stderr)
     yield {}
 
 
@@ -130,9 +135,8 @@ def build_server():
             tarefa: o texto completo do prompt a enviar ao Gemini.
             timeout: segundos a aguardar a resposta (padrao 180).
         """
-        if bridge is None:
-            raise RuntimeError("Bridge nao iniciada.")
-        return await bridge.ask(tarefa, timeout=timeout)
+        b = await ensure_bridge()
+        return await b.ask(tarefa, timeout=timeout)
 
     @mcp.tool()
     async def selecionar_modelo_gemini(
@@ -157,13 +161,12 @@ def build_server():
             modelo: 'flash-lite', 'flash' ou 'pro'.
             raciocinio: 'padrao' ou 'estendido' (opcional).
         """
-        if bridge is None:
-            raise RuntimeError("Bridge nao iniciada.")
+        b = await ensure_bridge()
         payload = {
             "modelo": _label_modelo(modelo),
             "raciocinio": _label_raciocinio(raciocinio),
         }
-        return await bridge.send_cmd("selecionar_modelo", payload, timeout=60)
+        return await b.send_cmd("selecionar_modelo", payload, timeout=60)
 
     @mcp.tool()
     async def configurar_gemini(
@@ -189,14 +192,13 @@ def build_server():
             raciocinio: 'padrao' ou 'estendido' (opcional).
             timeout: segundos a aguardar confirmacao (padrao 180).
         """
-        if bridge is None:
-            raise RuntimeError("Bridge nao iniciada.")
+        b = await ensure_bridge()
         payload = {
             "config": config,
             "modelo": _label_modelo(modelo),
             "raciocinio": _label_raciocinio(raciocinio),
         }
-        return await bridge.send_cmd("configurar", payload, timeout=timeout)
+        return await b.send_cmd("configurar", payload, timeout=timeout)
 
     @mcp.tool()
     async def inspecionar_gemini(seletor: str = "", max: int = 40) -> str:
@@ -212,10 +214,9 @@ def build_server():
             seletor: seletor CSS a inspecionar (vazio = panorama geral do DOM).
             max: maximo de elementos retornados (padrao 40).
         """
-        if bridge is None:
-            raise RuntimeError("Bridge nao iniciada.")
+        b = await ensure_bridge()
         payload = {"seletor": seletor, "max": max}
-        return await bridge.send_cmd("inspecionar", payload, timeout=30)
+        return await b.send_cmd("inspecionar", payload, timeout=30)
 
     @mcp.tool()
     async def consultar_gemini(tarefa: str, timeout: int = 180) -> str:
@@ -233,9 +234,8 @@ def build_server():
             tarefa: o prompt da chamada atual (substitui a mensagem anterior).
             timeout: segundos a aguardar a resposta (padrao 180).
         """
-        if bridge is None:
-            raise RuntimeError("Bridge nao iniciada.")
-        return await bridge.send_cmd("consultar", {"tarefa": tarefa}, timeout=timeout)
+        b = await ensure_bridge()
+        return await b.send_cmd("consultar", {"tarefa": tarefa}, timeout=timeout)
 
     @mcp.tool()
     async def listar_conversas_gemini() -> str:
@@ -251,9 +251,8 @@ def build_server():
 
         Nao use inspecionar_gemini para listar conversas — e muito mais caro.
         """
-        if bridge is None:
-            raise RuntimeError("Bridge nao iniciada.")
-        return await bridge.send_cmd("listar_conversas", {}, timeout=30)
+        b = await ensure_bridge()
+        return await b.send_cmd("listar_conversas", {}, timeout=30)
 
     @mcp.tool()
     async def abrir_conversa_gemini(conversa_id: str) -> str:
@@ -267,9 +266,8 @@ def build_server():
         Args:
             conversa_id: o id da conversa (parte final da URL: gemini.google.com/app/<id>).
         """
-        if bridge is None:
-            raise RuntimeError("Bridge nao iniciada.")
-        return await bridge.send_cmd(
+        b = await ensure_bridge()
+        return await b.send_cmd(
             "abrir_conversa", {"conversa_id": conversa_id}, timeout=30
         )
 
@@ -299,8 +297,7 @@ def build_server():
             instrucao: o que mudar, em linguagem natural.
             timeout: segundos a aguardar o Gemini (padrao 300).
         """
-        if bridge is None:
-            raise RuntimeError("Bridge nao iniciada.")
+        b = await ensure_bridge()
         p = Path(caminho)
         if not p.is_file():
             raise RuntimeError(f"Arquivo nao encontrado: {caminho}")
@@ -315,7 +312,7 @@ def build_server():
             "comentarios do tipo 'resto igual'. Preserve tudo o que nao muda.\n\n"
             f"```\n{original}\n```"
         )
-        resp = await bridge.ask(prompt, timeout=timeout)
+        resp = await b.ask(prompt, timeout=timeout)
         novo = _extrai_codigo(resp)
         if not novo.strip():
             raise RuntimeError("Gemini devolveu vazio; nada foi gravado.")
@@ -359,8 +356,7 @@ def build_server():
             arquivo_destino: caminho absoluto do novo arquivo a criar com o resultado.
             timeout:         segundos a aguardar o Gemini (padrao 300).
         """
-        if bridge is None:
-            raise RuntimeError("Bridge nao iniciada.")
+        b = await ensure_bridge()
         p_origem = Path(arquivo_origem)
         if not p_origem.is_file():
             raise RuntimeError(f"Arquivo nao encontrado: {arquivo_origem}")
@@ -372,7 +368,7 @@ def build_server():
             "cercado por crases triplas. Nao escreva nada antes nem depois do bloco.\n\n"
             f"```\n{conteudo}\n```"
         )
-        resp = await bridge.ask(prompt, timeout=timeout)
+        resp = await b.ask(prompt, timeout=timeout)
         resultado = _extrai_codigo(resp)
         if not resultado.strip():
             raise RuntimeError("Gemini devolveu vazio; nada foi gravado.")
