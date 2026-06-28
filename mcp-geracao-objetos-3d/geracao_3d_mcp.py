@@ -148,12 +148,12 @@ async def baixar_referencia_3d(peca: str, forcar: bool = False) -> str:
 async def gerar_modelo_3d(peca: str, parametros_json: str = "{}") -> str:
     """Envia código ou parâmetros ao Blender para gerar, medir e capturar 4 vistas do modelo 3D.
 
-    Esta ferramenta limpa a cena do Blender, importa o gerador correspondente a peça
-    da pasta parts/ (ou roda o assembler se peca == 'assembler') e retorna o relatório
-    geométrico final junto com os metadados das vistas renderizadas.
+    Esta ferramenta tenta se comunicar com a ponte GUI do Blender na porta 19000.
+    Caso o Blender esteja fechado, ela automaticamente executa o processo em
+    modo HEADLESS (em segundo plano), gerando o modelo STL e renderizando as 4 vistas.
 
     Args:
-        peca: Nome do arquivo em parts/ (ex: 'brake_disc') ou 'assembler' para rodar a montagem completa.
+        peca: Nome do arquivo em parts/ (ex: 'brake_disc', 'arvore_lowpoly') ou 'assembler' para rodar a montagem.
         parametros_json: String JSON contendo os parâmetros a passar para o gerador (ex: '{"variante": "esportivo"}')
     """
     # Valida parâmetros JSON
@@ -162,25 +162,10 @@ async def gerar_modelo_3d(peca: str, parametros_json: str = "{}") -> str:
     except Exception as e:
         return json.dumps({"sucesso": False, "erro": f"JSON de parametros invalido: {e}"})
 
-    # Caso seja montagem completa
-    if peca.lower().strip() == "assembler":
-        script_file = ROOT / "assembler.py"
-        if not script_file.exists():
-            return json.dumps({"sucesso": False, "erro": "Arquivo assembler.py nao encontrado."})
-        codigo = script_file.read_text(encoding="utf-8")
-    else:
-        # Caso seja uma peça específica
-        part_name = peca.lower().strip()
-        part_file = ROOT / "parts" / f"{part_name}.py"
-        if not part_file.exists():
-            return json.dumps({
-                "sucesso": False,
-                "erro": f"Gerador para a peca '{peca}' nao encontrado em parts/.",
-                "pecas_disponiveis": [p.stem for p in (ROOT / "parts").glob("*.py") if p.stem != "__init__"]
-            })
+    part_name = peca.lower().strip()
 
-        # Script dinâmico que limpa, importa, executa e valida
-        codigo = f"""
+    # Script dinâmico que limpa, importa, executa e valida na ponte GUI
+    codigo_gui = f"""
 import sys
 import os
 import bpy
@@ -207,9 +192,15 @@ for area in bpy.context.screen.areas:
 
 # 3. Executar o gerador
 try:
-    from parts.{part_name} import gerar_e_validar
-    params = json.loads({repr(json.dumps(params))})
-    obj, rel_texto = gerar_e_validar(**params)
+    if "{part_name}" == "assembler":
+        from assembler import montar_sistema_freio
+        montar_sistema_freio()
+        rel_texto = "Montagem concluida."
+        obj = bpy.context.active_object
+    else:
+        from parts.{part_name} import gerar_e_validar
+        params = json.loads({repr(json.dumps(params))})
+        obj, rel_texto = gerar_e_validar(**params)
     
     # Foca o objeto para o screenshot
     if obj:
@@ -227,33 +218,155 @@ except Exception as e:
     print("LARPERIAN_JSON_END")
 """
 
-    # Envia o script ao Blender via bridge HTTP cliente
+    # 1. Tenta rodar via Bridge (GUI) se ela estiver ativa
+    bridge_ativa = False
     try:
-        res = enviar_script(codigo)
-        if not res.sucesso:
+        bridge_ativa = testar_conexao()
+    except Exception:
+        pass
+
+    if bridge_ativa:
+        try:
+            res = enviar_script(codigo_gui)
+            if res.sucesso:
+                pasta_imagens = ROOT / "references" / "imagens" / part_name
+                pasta_imagens.mkdir(parents=True, exist_ok=True)
+                caminhos_salvos = res.salvar_screenshots(str(pasta_imagens) + "/")
+                retorno = {
+                    "sucesso": True,
+                    "modo": "bridge (Blender GUI ativo)",
+                    "resumo": res.resumo(),
+                    "screenshots_salvos": caminhos_salvos,
+                    "caminho_pasta_screenshots": str(pasta_imagens)
+                }
+                return json.dumps(retorno, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    # 2. Se a bridge falhar ou não estiver ativa, executa em modo HEADLESS
+    blender_path = r"C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe"
+    if not os.path.exists(blender_path):
+        import shutil
+        blender_path = shutil.which("blender") or "blender"
+
+    import tempfile
+    import shutil
+    
+    pasta_imagens = ROOT / "references" / "imagens" / part_name
+    pasta_imagens.mkdir(parents=True, exist_ok=True)
+    
+    fd_script, path_script = tempfile.mkstemp(suffix="_run.py", text=True)
+    path_stl = str(pasta_imagens / "temp_output.stl")
+    os.close(fd_script)
+    
+    script_headless = f"""
+import sys
+import os
+import bpy
+import json
+import traceback
+
+ROOT = r"{str(ROOT).replace('\\', '/')}"
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+# 1. Limpar a cena
+bpy.ops.object.select_all(action="SELECT")
+bpy.ops.object.delete()
+for col in list(bpy.data.collections):
+    bpy.data.collections.remove(col)
+
+try:
+    if "{part_name}" == "assembler":
+        from assembler import montar_sistema_freio
+        montar_sistema_freio()
+    else:
+        from parts.{part_name} import gerar_e_validar
+        params = json.loads({repr(json.dumps(params))})
+        obj, rel_texto = gerar_e_validar(**params)
+        
+    # Exportar para STL
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.wm.stl_export(filepath={repr(path_stl)}, export_selected_objects=True, apply_modifiers=True)
+    print("LARP_HEADLESS_OK")
+except Exception as e:
+    print("LARP_HEADLESS_ERR:", str(e))
+    traceback.print_exc()
+"""
+    
+    try:
+        Path(path_script).write_text(script_headless, encoding="utf-8")
+        
+        # Executa geração no Blender headless redirecionando stdout/stderr para log temporário
+        fd_gen_log, path_gen_log = tempfile.mkstemp(suffix="_gen.log", text=True)
+        os.close(fd_gen_log)
+        
+        with open(path_gen_log, "w", encoding="utf-8") as f_log:
+            proc_gen = subprocess.run([blender_path, "--background", "--python", path_script], stdout=f_log, stderr=f_log, timeout=90)
+            
+        gen_output = Path(path_gen_log).read_text(encoding="utf-8", errors="ignore")
+        if os.path.exists(path_gen_log):
+            os.unlink(path_gen_log)
+        
+        # Remove script temporário
+        if os.path.exists(path_script):
+            os.unlink(path_script)
+            
+        if "LARP_HEADLESS_OK" not in gen_output:
             return json.dumps({
                 "sucesso": False,
-                "erro": f"Erro retornado pelo Blender: {res.erro}"
+                "erro": f"Falha na geracao headless do Blender:\nLogs:\n{gen_output}"
             }, indent=2)
-
-        # Salva localmente os 4 screenshots tirados pelo Blender na pasta de imagens da peça
-        # para que o agente ou usuário possa visualizá-los
-        pasta_imagens = ROOT / "references" / "imagens" / peca.lower().strip()
-        pasta_imagens.mkdir(parents=True, exist_ok=True)
-        caminhos_salvos = res.salvar_screenshots(str(pasta_imagens) + "/")
-
-        # Retorna o resumo da modelagem com o caminho dos screenshots salvos no disco
-        retorno = {
+            
+        # Executa renderização headless redirecionando stdout/stderr para log temporário
+        render_script = ROOT / "prototype" / "render_views.py"
+        fd_render_log, path_render_log = tempfile.mkstemp(suffix="_render.log", text=True)
+        os.close(fd_render_log)
+        
+        with open(path_render_log, "w", encoding="utf-8") as f_log:
+            proc_render = subprocess.run([blender_path, "--background", "--python", str(render_script), "--", path_stl], stdout=f_log, stderr=f_log, timeout=90)
+            
+        render_output = Path(path_render_log).read_text(encoding="utf-8", errors="ignore")
+        if os.path.exists(path_render_log):
+            os.unlink(path_render_log)
+        
+        # Remove o STL temporário
+        if os.path.exists(path_stl):
+            os.unlink(path_stl)
+            
+        if "LARP: FIM" not in render_output:
+            return json.dumps({
+                "sucesso": False,
+                "erro": f"Falha na renderizacao headless do Blender:\nLogs:\n{render_output}"
+            }, indent=2)
+            
+        # Move os 4 screenshots da pasta temporária para a definitiva
+        src_dir = ROOT / "prototype" / "views" / "temp_output"
+        caminhos_salvos = []
+        for vista in ["perspectiva", "frente", "lado", "topo"]:
+            src_file = src_dir / f"{vista}.png"
+            dest_file = pasta_imagens / f"{vista}.png"
+            if src_file.exists():
+                if dest_file.exists():
+                    os.unlink(str(dest_file))
+                shutil.move(str(src_file), str(dest_file))
+                caminhos_salvos.append(str(dest_file))
+                
+        if src_dir.exists():
+            shutil.rmtree(src_dir)
+            
+        return json.dumps({
             "sucesso": True,
-            "resumo": res.resumo(),
-            "screenshots_salvos": caminhos_salvos,
+            "modo": "headless (Blender executado em background)",
+            "resumo": f"Peca '{peca}' gerada e renderizada com sucesso (headless).",
+            "screenshots_salvos": [str(p) for p in caminhos_salvos],
             "caminho_pasta_screenshots": str(pasta_imagens)
-        }
-        return json.dumps(retorno, indent=2, ensure_ascii=False)
+        }, indent=2, ensure_ascii=False)
+        
     except Exception as e:
         return json.dumps({
             "sucesso": False,
-            "erro": f"Erro de comunicacao com a Larperian Bridge do Blender: {e}. Verifique se o Blender esta aberto e a ponte ativa."
+            "erro": f"Falha na execucao headless: {e}"
         }, indent=2)
 
 
