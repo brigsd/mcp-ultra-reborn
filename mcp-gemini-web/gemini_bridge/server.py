@@ -104,10 +104,10 @@ async def _lifespan(_server):
     yield {}
 
 
-def _salvar_imagem_local(url: str, pasta_key: str | None) -> str:
+def _salvar_imagem_local(base64_data: str, pasta_key: str | None) -> str:
+    import base64
     import datetime
     import sys
-    import urllib.request
     import uuid
 
     repo_root = os.path.dirname(
@@ -128,21 +128,13 @@ def _salvar_imagem_local(url: str, pasta_key: str | None) -> str:
     filepath = os.path.join(destino_dir, filename)
 
     try:
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                )
-            },
-        )
-        with urllib.request.urlopen(req, timeout=30) as response:
-            with open(filepath, "wb") as f:
-                f.write(response.read())
+        data = base64.b64decode(base64_data)
+        with open(filepath, "wb") as f:
+            f.write(data)
         return filepath
     except Exception as e:
-        print(f"[gemini-web] Erro ao baixar imagem: {e}", file=sys.stderr)
-        return f"Erro ao baixar: {e}"
+        print(f"[gemini-web] Erro ao salvar imagem local: {e}", file=sys.stderr)
+        return f"Erro ao salvar: {e}"
 
 
 def build_server():
@@ -227,26 +219,35 @@ def build_server():
             imagem_precisa: True (padrao) para ativar imagem precisa e raciocinio estendido, False caso contrario.
             timeout: segundos a aguardar o retorno (padrao 180).
         """
+        import json
         habilitar = True if imagem_precisa is None else bool(imagem_precisa)
         b = await ensure_bridge()
-        resp_text = await b.send_cmd(
+        resp_data = await b.send_cmd(
             "gerar_imagem",
             {"prompt": prompt, "imagem_precisa": habilitar},
             timeout=timeout,
         )
 
-        # Extrai as URLs e faz o download local
-        urls = re.findall(r"-\s+(https?://\S+)", resp_text)
-        if urls:
-            caminhos = []
-            for url in urls:
-                caminho = _salvar_imagem_local(url, pasta_destino)
-                caminhos.append(caminho)
-            resp_text += "\n\n[Salvo Localmente]:\n" + "\n".join(
-                f"- {c}" for c in caminhos
-            )
+        try:
+            resp_json = json.loads(resp_data)
+            resp_text = resp_json.get("text", "")
+            images = resp_json.get("images", [])
 
-        return resp_text
+            if images:
+                caminhos = []
+                for img in images:
+                    base64_data = img.get("base64")
+                    if base64_data:
+                        caminho = _salvar_imagem_local(
+                            base64_data, pasta_destino
+                        )
+                        caminhos.append(caminho)
+                resp_text += "\n\n[Salvo Localmente]:\n" + "\n".join(
+                    f"- {c}" for c in caminhos
+                )
+            return resp_text
+        except Exception:
+            return resp_data
 
 
     @mcp.tool()

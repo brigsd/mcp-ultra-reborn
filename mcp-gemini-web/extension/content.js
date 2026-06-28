@@ -290,6 +290,27 @@ async function configurarCriarImagem(habilitar) {
   }
 }
 
+async function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function baixarImagemBase64(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blob = await r.blob();
+    return await blobToBase64(blob);
+  } catch (e) {
+    console.error("[gemini-web] Erro ao baixar imagem na extensao:", e);
+    return null;
+  }
+}
+
 async function handleGerarImagem(prompt, imagemPrecisa) {
   console.log("[gemini-web] handleGerarImagem iniciada. prompt =", prompt, "imagemPrecisa =", imagemPrecisa);
   const habilitar = (imagemPrecisa === undefined || imagemPrecisa === null) ? true : !!imagemPrecisa;
@@ -311,7 +332,28 @@ async function handleGerarImagem(prompt, imagemPrecisa) {
   }
 
   console.log("[gemini-web] Enviando prompt...");
-  return await handleAsk(prompt);
+  const rawText = await handleAsk(prompt);
+  
+  const lastResp = ultimaResposta();
+  const imgs = [];
+  if (lastResp) {
+    const imgEls = Array.from(lastResp.querySelectorAll('generated-image img, single-image img, img[src^="http"], img[src^="blob:"]'));
+    for (const img of imgEls) {
+      const src = img.src;
+      if (!src || src.includes("googleusercontent.com/assets/") || src.includes("gstatic.com")) continue;
+      
+      console.log("[gemini-web] Baixando imagem na extensao:", src);
+      const base64 = await baixarImagemBase64(src);
+      if (base64) {
+        imgs.push({ url: src, base64: base64 });
+      }
+    }
+  }
+
+  return JSON.stringify({
+    text: rawText,
+    images: imgs
+  });
 }
 
 
