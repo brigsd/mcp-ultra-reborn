@@ -251,13 +251,15 @@ except Exception as e:
 
     import tempfile
     import shutil
-    
+
     pasta_imagens = ROOT / "references" / "imagens" / part_name
     pasta_imagens.mkdir(parents=True, exist_ok=True)
-    
-    fd_script, path_script = tempfile.mkstemp(suffix="_run.py", text=True)
+
     path_stl = str(pasta_imagens / "temp_output.stl")
-    os.close(fd_script)
+
+    # Arquivo temporário para o script (delete=False para evitar lock no Windows)
+    fd_script, path_script = tempfile.mkstemp(suffix="_run.py", text=True)
+    os.close(fd_script)  # fecha o handle antes de escrever via Path
     
     # Monta o script headless usando importlib para carregar o arquivo diretamente por caminho
     # (evita problemas de resolução de módulo em Blender headless)
@@ -307,16 +309,27 @@ except Exception as e:
     try:
         Path(path_script).write_text(script_headless, encoding="utf-8")
         
-        # Executa geração no Blender headless redirecionando stdout/stderr para log temporário
-        fd_gen_log, path_gen_log = tempfile.mkstemp(suffix="_gen.log", text=True)
-        os.close(fd_gen_log)
+        # Debug: copia o script para um caminho fixo para inspeção
+        debug_script_path = ROOT / "references" / "imagens" / part_name / "debug_last_script.py"
+        debug_script_path.parent.mkdir(parents=True, exist_ok=True)
+        import shutil as _shutil
+        _shutil.copy2(path_script, str(debug_script_path))
         
-        with open(path_gen_log, "w", encoding="utf-8") as f_log:
-            proc_gen = subprocess.run([blender_path, "--background", "--python", path_script], stdout=f_log, stderr=f_log, timeout=180)
-            
-        gen_output = Path(path_gen_log).read_text(encoding="utf-8", errors="ignore")
-        if os.path.exists(path_gen_log):
-            os.unlink(path_gen_log)
+        # Executa geração no Blender headless
+        # Usa PIPE com communicate() — seguro para qualquer volume de output no Windows
+        proc_gen = subprocess.Popen(
+            [blender_path, "--background", "--python", path_script],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        )
+        try:
+            gen_output_bytes, _ = proc_gen.communicate(timeout=180)
+            gen_output = gen_output_bytes.decode("utf-8", errors="ignore")
+        except subprocess.TimeoutExpired:
+            proc_gen.kill()
+            proc_gen.communicate()
+            if os.path.exists(path_script):
+                os.unlink(path_script)
+            return json.dumps({"sucesso": False, "erro": "Timeout na geracao headless (>180s)"}, indent=2)
         
         # Remove script temporário
         if os.path.exists(path_script):
@@ -328,17 +341,19 @@ except Exception as e:
                 "erro": f"Falha na geracao headless do Blender:\nLogs:\n{gen_output}"
             }, indent=2)
             
-        # Executa renderização headless redirecionando stdout/stderr para log temporário
+        # Executa renderização headless com Popen + communicate (seguro no Windows)
         render_script = ROOT / "prototype" / "render_views.py"
-        fd_render_log, path_render_log = tempfile.mkstemp(suffix="_render.log", text=True)
-        os.close(fd_render_log)
-        
-        with open(path_render_log, "w", encoding="utf-8") as f_log:
-            proc_render = subprocess.run([blender_path, "--background", "--python", str(render_script), "--", path_stl], stdout=f_log, stderr=f_log, timeout=180)
-            
-        render_output = Path(path_render_log).read_text(encoding="utf-8", errors="ignore")
-        if os.path.exists(path_render_log):
-            os.unlink(path_render_log)
+        proc_render = subprocess.Popen(
+            [blender_path, "--background", "--python", str(render_script), "--", path_stl],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        )
+        try:
+            render_output_bytes, _ = proc_render.communicate(timeout=180)
+            render_output = render_output_bytes.decode("utf-8", errors="ignore")
+        except subprocess.TimeoutExpired:
+            proc_render.kill()
+            proc_render.communicate()
+            return json.dumps({"sucesso": False, "erro": "Timeout na renderizacao headless (>180s)"}, indent=2)
         
         # Remove o STL temporário
         if os.path.exists(path_stl):
