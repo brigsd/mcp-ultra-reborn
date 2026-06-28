@@ -558,12 +558,69 @@ async def vehicle_gerar_modelo(spec_json: str, qualidade: str = "draft") -> str:
 
 @mcp.tool()
 async def vehicle_pipeline(prompt: str, referencia_path: str = "", medidas_json: str = "{}", budget_json: str = "{}") -> str:
-    """Fluxo composto: cria spec e gera o modelo veicular MVP em modo headless."""
+    """Fluxo composto (fase 6). Cria a spec e gera o modelo. Se `referencia_path`
+    for o PNG da VISTA LATERAL de um blueprint, roda o loop de iteracao
+    automatica: gera -> compara silhueta -> ajusta parametros da spec -> repete,
+    ate o budget. Sem referencia, faz uma geracao unica em qualidade standard.
+
+    Args:
+        prompt: Descricao do veiculo (define o arquetipo).
+        referencia_path: PNG recortado da vista lateral do blueprint (opcional).
+        medidas_json: JSON com medidas em mm.
+        budget_json: JSON do budget, ex.: {"max_iterations": 3, "target_shape_iou": 0.92}.
+    """
     try:
         from vehicle_workspace.vehicle.schema import create_spec
+        from vehicle_workspace.orchestration.budgets import Budget
+        from vehicle_workspace.orchestration.iteration import iterate
+        from vehicle_workspace.vision.compare import compare_side, public_report
+
         medidas = json.loads(medidas_json) if medidas_json else {}
         spec = create_spec(prompt=prompt, referencia_path=referencia_path, medidas=medidas)
-        return _run_vehicle_headless("model", json.dumps(spec, ensure_ascii=False), "draft")
+        length = float(spec["dimensions"]["length"])
+
+        if not referencia_path or not os.path.exists(referencia_path):
+            return _run_vehicle_headless("model", json.dumps(spec, ensure_ascii=False), "standard")
+
+        budget = Budget.from_json(json.loads(budget_json) if budget_json else {})
+
+        def gen_and_cmp(s):
+            rep_json = _run_vehicle_headless("model", json.dumps(s, ensure_ascii=False), "standard")
+            rep = json.loads(rep_json)
+            if not rep.get("success"):
+                raise RuntimeError(rep.get("error", "falha na geracao headless"))
+            sil = _find_silhouette(rep.get("paths", {}).get("output_dir", ""))
+            if not sil:
+                raise RuntimeError("silhueta lateral nao foi gerada")
+            comp = public_report(compare_side(sil, referencia_path, length))
+            return rep, comp
+
+        result = iterate(spec, gen_and_cmp, budget)
+        return json.dumps({"success": True, "blueprint": referencia_path, **result}, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        import traceback
+        return json.dumps({"success": False, "error": str(exc), "traceback": traceback.format_exc()}, indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
+async def vehicle_iterar(spec_json: str, compare_json: str) -> str:
+    """Passo unico de correcao (fase 6): le uma comparacao de silhueta e devolve
+    a spec com o bloco `tuning` ajustado. Corrige PARAMETROS, nunca a malha.
+
+    Args:
+        spec_json: VehicleSpec atual (JSON).
+        compare_json: Saida de vehicle_comparar_blueprint (precisa de shape_regions).
+    """
+    try:
+        from vehicle_workspace.orchestration.iteration import propose_tuning
+        from vehicle_workspace.vehicle.schema import load_spec
+        spec = load_spec(spec_json)
+        comp = json.loads(compare_json) if compare_json else {}
+        new_tuning = propose_tuning(spec, comp)
+        out = dict(spec)
+        out.pop("_meters", None)
+        out["tuning"] = new_tuning
+        return json.dumps({"success": True, "tuning": new_tuning, "spec": out}, indent=2, ensure_ascii=False)
     except Exception as exc:
         return json.dumps({"success": False, "error": str(exc)}, indent=2, ensure_ascii=False)
 

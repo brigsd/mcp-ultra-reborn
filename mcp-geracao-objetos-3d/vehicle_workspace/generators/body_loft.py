@@ -113,6 +113,21 @@ def _profiles(spec):
     bot_keys = [(0.0, gc + 0.10), (0.06, gc + 0.02), (0.12, gc),
                 (0.88, gc), (0.94, gc + 0.03), (1.0, gc + 0.09)]
 
+    # Tuning dirigido pela spec (fase 6): deltas aditivos no perfil do deck por
+    # regiao. So mexe FORA do greenhouse (nao toca o teto -> altura travada).
+    tuning = spec.get("tuning", {}) or {}
+
+    def _bump(keys, lo, hi, delta, vmin=0.18, vmax=0.80):
+        if not delta:
+            return keys
+        return [(s, max(vmin, min(vmax, v + delta)) if lo <= s <= hi else v)
+                for s, v in keys]
+
+    deck_keys = _bump(deck_keys, 0.95, 1.001, tuning.get("nose_delta", 0.0))
+    deck_keys = _bump(deck_keys, 0.66, 0.90, tuning.get("hood_delta", 0.0))
+    deck_keys = _bump(deck_keys, 0.06, 0.36, tuning.get("rear_deck_delta", 0.0))
+    deck_keys = _bump(deck_keys, -0.001, 0.05, tuning.get("tail_delta", 0.0))
+
     return {
         "length": length, "width": width, "height": height, "gc": gc,
         "wmax": wmax,
