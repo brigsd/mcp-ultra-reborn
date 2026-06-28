@@ -60,6 +60,28 @@ Registre no host pelo `.mcp.json`. A extensão: `chrome://extensions` → Modo d
 desenvolvedor → "Carregar sem compactação" → pasta `extension/`. Abra
 `https://chat.deepseek.com` logado; a aba pode ficar fixada em segundo plano.
 
+## Modo HTTP (conexão persistente e portável)
+
+Igual ao gemini-web. Por padrão fala **stdio** (o host inicia e segura o
+processo, e o servidor cai quando o host recarrega). Em **HTTP** ele fica de pé
+sozinho numa porta e o host só conecta pela URL, sobrevivendo a quedas do host.
+Sendo streamable-http padrão MCP, fica plugável em qualquer host (Claude Code,
+Codex, Antigravity).
+
+```bash
+# sobe o servidor HTTP persistente (porta 8776 por padrão)
+DEEPSEEK_TRANSPORT=http python deepseek_mcp.py
+#   Windows PowerShell:  $env:DEEPSEEK_TRANSPORT="http"; python deepseek_mcp.py
+```
+
+Endpoint em `http://127.0.0.1:8776/mcp`. A bridge WebSocket (8766) sobe sozinha na
+primeira sessão. Variáveis: `DEEPSEEK_TRANSPORT=http`, `DEEPSEEK_HTTP_HOST`
+(padrão 127.0.0.1) e `DEEPSEEK_HTTP_PORT` (padrão 8776). Registro como URL:
+
+```json
+{ "mcpServers": { "deepseek-web": { "type": "http", "url": "http://127.0.0.1:8776/mcp" } } }
+```
+
 ## inspecionar_deepseek — ferramenta de exceção
 
 `inspecionar_deepseek` descreve o DOM real da página. Serve **apenas à calibração**

@@ -19,4 +19,10 @@ os.environ.setdefault("DEEPSEEK_WS_PORT", "8766")
 from deepseek_bridge.server import build_server  # noqa: E402
 
 if __name__ == "__main__":
-    build_server().run()
+    # DEEPSEEK_TRANSPORT=http roda como servidor HTTP persistente (de pe sozinho,
+    # o host conecta pela URL); qualquer outro valor mantem o stdio padrao.
+    _transporte = os.environ.get("DEEPSEEK_TRANSPORT", "stdio").strip().lower()
+    if _transporte in ("http", "streamable-http", "streamable_http"):
+        build_server().run(transport="streamable-http")
+    else:
+        build_server().run()

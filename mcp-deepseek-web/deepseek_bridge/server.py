@@ -9,6 +9,7 @@ Ferramentas:
 - inspecionar_deepseek : diagnostico do DOM real (calibracao de seletores).
 """
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -16,7 +17,12 @@ from mcp.server.fastmcp import FastMCP
 
 from deepseek_bridge.bridge import Bridge
 
+# Bridge unica do processo (singleton). Em stdio ha uma sessao so; em HTTP o
+# lifespan roda por sessao, entao subir a bridge precisa ser idempotente: a 1a
+# sessao abre o WebSocket na porta, as demais reusam. Ninguem a derruba enquanto
+# o processo vive (o processo morrendo fecha tudo).
 bridge: Bridge | None = None
+_bridge_lock = asyncio.Lock()
 
 # Modos do DeepSeek (so selecionaveis no inicio do chat) -> rotulo visivel.
 MODOS = {
@@ -37,22 +43,34 @@ def _label_modo(modo: str | None) -> str | None:
     raise ValueError(f"Modo invalido: {modo!r}. Use um de {list(MODOS)}.")
 
 
+async def ensure_bridge() -> Bridge:
+    """Sobe a bridge WebSocket uma unica vez e devolve a instancia (singleton)."""
+    global bridge
+    if bridge is not None and bridge._server is not None:
+        return bridge
+    async with _bridge_lock:
+        if bridge is None or bridge._server is None:
+            host = os.environ.get("DEEPSEEK_WS_HOST", "127.0.0.1")
+            port = int(os.environ.get("DEEPSEEK_WS_PORT", "8766"))
+            b = Bridge(host, port)
+            await b.start()
+            bridge = b
+    return bridge
+
+
 @asynccontextmanager
 async def _lifespan(_server):
-    global bridge
-    host = os.environ.get("DEEPSEEK_WS_HOST", "127.0.0.1")
-    port = int(os.environ.get("DEEPSEEK_WS_PORT", "8766"))
-    bridge = Bridge(host, port)
-    await bridge.start()
-    try:
-        yield {}
-    finally:
-        await bridge.stop()
-        bridge = None
+    # Garante a bridge de pe (idempotente). Nao a derruba no teardown: e singleton
+    # do processo e pode ser compartilhada por varias sessoes (HTTP).
+    await ensure_bridge()
+    yield {}
 
 
 def build_server():
-    mcp = FastMCP("deepseek-web", lifespan=_lifespan)
+    # host/port usados so no transporte HTTP (streamable-http); no stdio sao ignorados.
+    http_host = os.environ.get("DEEPSEEK_HTTP_HOST", "127.0.0.1")
+    http_port = int(os.environ.get("DEEPSEEK_HTTP_PORT", "8776"))
+    mcp = FastMCP("deepseek-web", lifespan=_lifespan, host=http_host, port=http_port)
 
     @mcp.tool()
     async def deepseek_status() -> str:
