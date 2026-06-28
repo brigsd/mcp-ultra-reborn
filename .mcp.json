@@ -1,22 +1,22 @@
 {
   "mcpServers": {
     "gemini-web": {
-      "command": "python",
+      "command": "C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\.venv\\Scripts\\python.exe",
       "args": ["C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\mcp-gemini-web\\gemini_mcp.py"]
     },
     "deepseek-web": {
-      "command": "python",
+      "command": "C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\.venv\\Scripts\\python.exe",
       "args": ["C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\mcp-deepseek-web\\deepseek_mcp.py"]
     },
     "ia-local": {
-      "command": "python",
+      "command": "C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\.venv\\Scripts\\python.exe",
       "args": ["-m", "mcp_qwen_coder.server"],
       "env": {
         "MCP_SHELL": "auto"
       }
     },
     "qwen-controller": {
-      "command": "python",
+      "command": "C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\.venv\\Scripts\\python.exe",
       "args": ["C:\\Users\\tiago\\Desktop\\mcp-ultra-reborn\\mcp-qwen-controller\\qwen_mcp.py"],
       "env": {
         "QWEN_CDP_HOST": "127.0.0.1",

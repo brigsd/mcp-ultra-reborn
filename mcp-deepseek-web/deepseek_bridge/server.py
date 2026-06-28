@@ -78,6 +78,34 @@ def build_server():
         return "conectada" if (bridge and bridge.connected) else "desconectada"
 
     @mcp.tool()
+    async def reconectar_deepseek(ambos: bool = False) -> str:
+        """Inicia o Chrome com a extensao do deepseek-web carregada.
+
+        Se `ambos` for True, carrega tambem a extensao do gemini-web.
+        Abre as respectivas abas automaticamente.
+
+        Args:
+            ambos: True para carregar e abrir tambem o gemini-web.
+        """
+        import subprocess
+
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        deepseek_ext = os.path.join(repo_root, "mcp-deepseek-web", "extension")
+        
+        if ambos:
+            gemini_ext = os.path.join(repo_root, "mcp-gemini-web", "extension")
+            exts = f"{gemini_ext},{deepseek_ext}"
+            urls = '"https://gemini.google.com" "https://chat.deepseek.com"'
+        else:
+            exts = deepseek_ext
+            urls = '"https://chat.deepseek.com"'
+
+        cmd = f'cmd.exe /c start chrome --load-extension="{exts}" {urls}'
+        subprocess.Popen(cmd, shell=True)
+        return f"Comando enviado: {cmd}. Feche todas as janelas do Chrome se nao conectar."
+
+
+    @mcp.tool()
     async def pergunta_deepseek(tarefa: str, timeout: int = 180) -> str:
         """Manda uma tarefa nova pro DeepSeek web (one-shot) e devolve a resposta."""
         if bridge is None:
