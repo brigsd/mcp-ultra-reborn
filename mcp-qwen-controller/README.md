@@ -100,11 +100,16 @@ No Claude Code, o `.mcp.json` do repositório raiz já declara este servidor. Em
 host, aponte `command: python` e `args: ["<caminho absoluto>/qwen_mcp.py"]`.
 
 
-## Patch de Robustez (Electron Mod)
+## Patch de Robustez (Electron Mod & Auto-MCP)
 
-Para evitar dependência de APIs externas de automação (como a abertura explícita da porta de depuração 9222 do Chrome, que crasha se for iniciada de terminais de serviço em background), você pode aplicar o nosso **Patch de Robustez**. 
+Para evitar dependência de APIs externas de automação (como a abertura explícita da porta de depuração 9222 do Chrome, que crasha se for iniciada de terminais de serviço em background), você deve aplicar o nosso **Patch de Robustez**. 
 
-Esse patch descompila o `app.asar` original do Qwen Chat Desktop, injeta um servidor HTTP de controle remoto interno (porta `8780`) e hooks de monitoramento do IPC das ferramentas MCP, remontando o arquivo com segurança. Com ele ativo, a comunicação com o Qwen passa a ser feita de forma nativa e híbrida (HTTP + CDP), aumentando consideravelmente a estabilidade da automação.
+Esse patch descompila o `app.asar` original do Qwen Chat Desktop, injeta um servidor HTTP de controle remoto interno (porta `8780`) e hooks de monitoramento do IPC das ferramentas MCP, remontando o arquivo com segurança.
+
+### Recursos do Patch:
+1. **API HTTP de Controle**: Ativada em `http://127.0.0.1:8780` e utilizada automaticamente pelo `qwen-controller` para evaluate e comandos.
+2. **Auto-Ativação do MCP (Auto-MCP)**: O patch injeta um monitor leve no webview do Qwen. Toda vez que um novo chat ou projeto é iniciado, o monitor verifica se o chip **MCP** e as **Ferramentas** estão ativados. Caso não estejam, ele clica automaticamente no menu `+`, ativa as opções em background e fecha o menu. Isso garante que as ferramentas fiquem sempre ligadas sem intervenção humana!
+3. **Agent Loop Fallback**: Se o Qwen falhar em executar ferramentas MCP nativas na nuvem, o monitor intercepta os padrões de chamada descritos no chat e executa em background através da API HTTP local.
 
 ### Como aplicar o Patch:
 1. Feche o Qwen Chat Desktop completamente.
@@ -113,9 +118,8 @@ Esse patch descompila o `app.asar` original do Qwen Chat Desktop, injeta um serv
    python scripts/patch_qwen.py
    ```
    *Um backup automático de seu asar limpo será criado no mesmo diretório (`app.asar.bak`).*
-3. Abra o Qwen Chat Desktop normalmente (seja pelo atalho gráfico tradicional do Windows ou chamando `explorer.exe "C:\Users\<voce>\AppData\Local\Programs\Qwen\Qwen.exe"` pelo terminal). 
+3. Abra o Qwen Chat Desktop normalmente (seja pelo atalho gráfico tradicional do Windows ou chamando `explorer.exe "C:\Users\<voce>\AppData\Local\Programs\Qwen\Qwen.exe"` pelo terminal).
 
-A API HTTP de controle remoto estará ativada em `http://127.0.0.1:8780` e será utilizada automaticamente pelo `qwen-controller`.
 
 ## Sistema Multi-Agente (Orquestração Local)
 

@@ -36,21 +36,15 @@ fato necessário.
 
 ### mcp-qwen-coder — acesso ao terminal e aos arquivos
 
-Concede a uma IA acesso ao terminal e ao sistema de arquivos da máquina,
-permitindo que ela atue como um agente local. Foi pensado para o Qwen Chat desktop,
-mas funciona com qualquer host MCP. A sessão é persistente: o diretório de trabalho
-é mantido entre comandos, o que permite navegar pelo sistema, rodar builds e
-executar scripts em sequência.
+Concede a uma IA acesso ao terminal e ao sistema de arquivos da máquina, permitindo que ela atue como um agente local completo. A sessão é persistente: o diretório de trabalho é mantido entre comandos.
 
-As ferramentas expostas são `run_command`, `change_directory`,
-`get_working_directory`, `list_directory`, `read_file`, `write_file`, `edit_file` e
-`get_system_info`. O servidor opera em dois transportes: **stdio**, para um host
-local, e **HTTP**, para uma IA web acessá-lo pela rede, neste caso com token Bearer
-e, idealmente, atrás de um túnel seguro. Há ainda uma restrição opcional de
-diretório (`MCP_ALLOWED_DIR`) e uma lista de comandos bloqueados, mas a restrição
-de diretório não se aplica ao `run_command` e, portanto, não constitui isolamento
-forte. O README do servidor descreve também como executar várias instâncias
-logadas do Qwen, por meio da clonagem de perfil, para um esquema multi-agente.
+As ferramentas expostas cobrem:
+* **Terminal**: `run_command`, `change_directory`, `get_working_directory`, `get_system_info`.
+* **Arquivos**: `list_directory`, `read_file`, `write_file`, `edit_file`.
+* **Capacidades Avançadas**: `grep_search` (busca recursiva de conteúdo), `find_files` (localizador glob), `read_file_lines` (leitura paginada), `index_codebase` (mapeador de símbolos de código).
+* **Planning Mode**: `create_plan`, `update_plan`, `get_plan` (gerenciamento persistente de planos).
+
+O servidor opera em stdio e HTTP (com autenticação por token). Há suporte a restrição opcional de diretório (`MCP_ALLOWED_DIR`). O README do servidor descreve também como executar várias instâncias logadas do Qwen para arquiteturas multi-agentes.
 
 ### mcp-gemini-web e mcp-deepseek-web — delegação a uma IA web
 
@@ -78,16 +72,11 @@ interface, e não para a operação normal.
 
 ### mcp-qwen-controller — delegação ao Qwen Chat desktop
 
-Segue a mesma ideia de delegação, mas o alvo é o **aplicativo Qwen Chat desktop**, e
-não uma aba do navegador. Por ser um aplicativo Electron iniciado com a porta de
-depuração aberta, o servidor o controla diretamente pelo Chrome DevTools Protocol,
-sem extensão. A conversa vive em um *webview* (`chat.qwen.ai`) dentro do aplicativo.
+Segue a mesma ideia de delegação, mas o alvo é o **aplicativo Qwen Chat desktop**, controlado diretamente pelo Chrome DevTools Protocol (CDP) e por uma API HTTP local.
 
-As ferramentas expostas são `pergunta_qwen` para o envio
-simples, `selecionar_modelo_qwen` para trocar o modelo, o par `configurar_qwen` mais
-`consultar_qwen` para o fluxo "API", `qwen_status` para o estado e `inspecionar_qwen`
-para a calibração excepcional. O requisito de operação é que o Qwen desktop esteja
-aberto, autenticado e iniciado com `--remote-debugging-port=9222`.
+As ferramentas expostas cobrem o envio simples (`pergunta_qwen`), troca de modelo (`selecionar_modelo_qwen`), fluxo "API" (`configurar_qwen`/`consultar_qwen`), delegação multi-agente (`delegar_para_subagente`) e diagnóstico.
+
+O servidor oferece um **Patch de Robustez** para o Electron do Qwen. Quando aplicado, ele sobe uma API HTTP interna de controle e injeta um monitor que **auto-ativa as Ferramentas e o modo MCP** a cada novo chat ou projeto aberto. Ele serve também como fallback autônomo (Agent Loop) caso a execução nativa de ferramentas falhe.
 
 ### mcp-geracao-objetos-3d — modelagem 3D geométrica precisa via Blender
 

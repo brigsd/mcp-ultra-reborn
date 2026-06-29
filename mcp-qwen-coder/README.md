@@ -146,10 +146,11 @@ Veja `.env.example`. Principais:
 | `MCP_ALLOWED_DIR` | — | jail: restringe a árvore acessível |
 | `MCP_BLOCKED_PATTERNS` | — | regex CSV de comandos proibidos |
 
-## Roadmap
+## Estado Atual e Próximos Passos
 
-O Worker já entrega execução de comandos, navegação e edição de arquivos
-(read/write/edit). Próximos passos sugeridos: busca de conteúdo (grep) e de
-arquivos (glob) dedicadas, leitura de arquivo paginada (offset/limite de
-linhas), operações git dedicadas e busca na web — para se aproximar ainda mais
-de um agente completo como o Claude Code.
+O `mcp-qwen-coder` agora oferece um conjunto completo de **15 ferramentas** integradas que cobrem terminal persistente, busca recursiva (grep), localização de arquivos (glob), leitura paginada inteligente, indexação de codebase orientada a símbolos e um gerenciador de planos persistente (`create_plan` / `update_plan` / `get_plan`).
+
+Os próximos passos sugeridos para o repositório incluem:
+* Otimização de cache no parser do `index_codebase` para grandes codebases.
+* Suporte nativo para múltiplos perfis locais adicionais.
+
