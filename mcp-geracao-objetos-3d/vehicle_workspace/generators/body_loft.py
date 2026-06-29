@@ -131,7 +131,8 @@ def _profiles(spec):
     return {
         "length": length, "width": width, "height": height, "gc": gc,
         "wmax": wmax,
-        "half_width": lambda s: min(wmax, _interp_keys(s, hw_keys) * wmax),
+        # compensa o encolhimento do SubD/crease para a largura final bater no spec
+        "half_width": lambda s: _interp_keys(s, hw_keys) * wmax * 1.018,
         "deck_z": lambda s: _interp_keys(s, deck_keys) * height,
         "bottom_z": lambda s: _interp_keys(s, bot_keys),
         "gh_span": gh_span,
