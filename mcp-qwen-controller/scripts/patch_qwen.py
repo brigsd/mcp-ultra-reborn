@@ -4,10 +4,181 @@ import subprocess
 import sys
 from pathlib import Path
 
+MONITOR_JS_CODE = """
+(function() {
+  if (window.__qwen_monitor_active) return;
+  window.__qwen_monitor_active = true;
+  console.log('[QWEN-MONITOR] Ativo.');
+
+  let lastProcessedText = "";
+
+  function preencherTextarea(text) {
+    const ta = document.querySelector('textarea.message-input-textarea, textarea[placeholder]');
+    if (!ta) return false;
+    ta.focus();
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+    setter.call(ta, text);
+    
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    // Forca trigger do React via digitação física simulada
+    const spaceEvent = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true });
+    ta.dispatchEvent(spaceEvent);
+    ta.value += ' ';
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    const backspaceEvent = new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', bubbles: true });
+    ta.dispatchEvent(backspaceEvent);
+    ta.value = ta.value.slice(0, -1);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    return true;
+  }
+
+  function clicarEnviar() {
+    const btn = document.querySelector('button.send-button');
+    if (btn && !btn.disabled && !btn.classList.contains('disabled')) {
+      btn.click();
+      return true;
+    }
+    return false;
+  }
+
+  function parseToolCall(text) {
+    // Padrão 1: Formato XML do Qwen com parameter=
+    const funcRegex = /<function=(\\w+)>([\\s\\S]*?)<\/function>/i;
+    const funcMatch = text.match(funcRegex);
+    if (funcMatch) {
+      const toolName = funcMatch[1];
+      const body = funcMatch[2];
+      const args = {};
+      const paramRegex = /<parameter(?:=|\\s+name=")([^">]+)">([\\s\\S]*?)<\/parameter>/gi;
+      let pm;
+      while ((pm = paramRegex.exec(body)) !== null) {
+        args[pm[1]] = pm[2].trim();
+      }
+      if (Object.keys(args).length > 0) {
+        return { toolName, args };
+      }
+    }
+
+    // Padrão 2: Formato inline call:nome_ferramenta{prop: valor} ou nome_ferramenta(prop=valor)
+    const inlineRegex = /(?:call:)?(\\w+)(?:\\(|\\{)([\\s\\S]*?)(?:\\)|\\})/i;
+    const inlineMatch = text.match(inlineRegex);
+    if (inlineMatch) {
+      const toolName = inlineMatch[1];
+      const body = inlineMatch[2];
+      const args = {};
+      const paramRegex = /(\\w+)\\s*(?:=|:)\\s*(?:"([^"]*)"|'([^']*)'|([^,\\s\\(\\)\\}]+))/g;
+      let pm;
+      while ((pm = paramRegex.exec(body)) !== null) {
+        const key = pm[1];
+        const val = pm[2] !== undefined ? pm[2] : (pm[3] !== undefined ? pm[3] : pm[4]);
+        args[key] = val;
+      }
+      if (Object.keys(args).length > 0) {
+        return { toolName, args };
+      }
+    }
+
+    // Padrão 3: JSON bruto no chat
+    const jsonRegex = /\\{[\\s\\S]*?\\}/g;
+    let jsonMatch;
+    while ((jsonMatch = jsonRegex.exec(text)) !== null) {
+      try {
+        const obj = JSON.parse(jsonMatch[0]);
+        if (obj.tarefa && obj.subagente_port) {
+          return {
+            toolName: "delegar_para_subagente",
+            args: { tarefa: obj.tarefa, subagente_port: parseInt(obj.subagente_port, 10) }
+          };
+        }
+        if (obj.tool_name && obj.args) {
+          return { toolName: obj.tool_name, args: obj.args };
+        }
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  async function checkLastMessage() {
+    const msgs = document.querySelectorAll('.qwen-chat-message-assistant, [class*="message-assistant"], .response-message-content.phase-answer');
+    if (!msgs || msgs.length === 0) return;
+    const lastMsg = msgs[msgs.length - 1];
+
+    // Verifica se a mensagem já terminou de ser gerada (presença dos botões de rodapé/ação)
+    const isDone = lastMsg.querySelector('.copy-response-button, .response-message-footer, [class*="footer"], [class*="action"]');
+    if (!isDone) return;
+
+    const text = lastMsg.innerText || "";
+    if (text === lastProcessedText || !text.trim()) return;
+
+    const call = parseToolCall(text);
+    if (!call) return;
+
+    lastProcessedText = text;
+    console.log('[QWEN-MONITOR] Detectada chamada de ferramenta:', call);
+
+    const statusDiv = document.createElement('div');
+    statusDiv.style.cssText = "background: #f0f7ff; border: 1px solid #1890ff; padding: 12px; margin: 12px 0; border-radius: 8px; color: #1890ff; font-weight: bold; font-family: sans-serif; font-size: 13px; box-shadow: 0 2px 8px rgba(24,144,255,0.15);";
+    statusDiv.innerText = `[Orquestrador] Executando ferramenta "${call.toolName}" via MCP local...`;
+    lastMsg.appendChild(statusDiv);
+
+    try {
+      const port = window.location.port || '8780';
+      const response = await fetch(`http://127.0.0.1:${port}/tool-call`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: call.toolName,
+          arguments: call.args
+        })
+      });
+      
+      const data = await response.json();
+      console.log('[QWEN-MONITOR] Resposta recebida:', data);
+      
+      statusDiv.style.background = "#f6ffed";
+      statusDiv.style.borderColor = "#52c41a";
+      statusDiv.style.color = "#52c41a";
+      statusDiv.style.boxShadow = "0 2px 8px rgba(82,196,26,0.15)";
+      statusDiv.innerText = `[Orquestrador] Ferramenta "${call.toolName}" executada com sucesso! Enviando resposta...`;
+      
+      const resultText = data.result || data.error || JSON.stringify(data);
+      const formattedResponse = `[Resultado da ferramenta ${call.toolName}]:\\n${resultText}`;
+      
+      setTimeout(() => {
+        if (preencherTextarea(formattedResponse)) {
+          setTimeout(() => {
+            clicarEnviar();
+            statusDiv.remove();
+          }, 300);
+        }
+      }, 500);
+
+    } catch (err) {
+      console.error('[QWEN-MONITOR] Erro em /tool-call:', err);
+      statusDiv.style.background = "#fff2f0";
+      statusDiv.style.borderColor = "#ff4d4f";
+      statusDiv.style.color = "#ff4d4f";
+      statusDiv.style.boxShadow = "0 2px 8px rgba(255,77,79,0.15)";
+      statusDiv.innerText = `[Orquestrador] Erro ao executar ${call.toolName}: ${err.message}`;
+    }
+  }
+
+  const observer = new MutationObserver(() => {
+    checkLastMessage();
+  });
+  
+  observer.observe(document.body, { childList: true, subtree: true });
+  console.log('[QWEN-MONITOR] MutationObserver registrado.');
+})();
+"""
+
 def patch_qwen():
     print("=== Iniciando Patch Cirurgico no Qwen Chat Desktop ===")
     
-    # 1. Caminhos
     local_app_data = os.environ.get("LOCALAPPDATA")
     if not local_app_data:
         print("Erro: variavel LOCALAPPDATA nao encontrada.")
@@ -22,7 +193,6 @@ def patch_qwen():
         print(f"Erro: app.asar nao encontrado em: {asar_path}")
         sys.exit(1)
         
-    # 2. Workspace Temporario
     workspace = Path(r"C:\Users\tiago\Desktop\mcp-ultra-reborn\qwen-patch-temp")
     extracted_dir = workspace / "extracted"
     
@@ -31,7 +201,6 @@ def patch_qwen():
         shutil.rmtree(workspace, ignore_errors=True)
     os.makedirs(extracted_dir, exist_ok=True)
     
-    # 3. Backup
     if not backup_path.exists():
         print(f"Criando backup original...")
         shutil.copy2(asar_path, backup_path)
@@ -39,7 +208,6 @@ def patch_qwen():
         print(f"Restaurando do backup limpo para aplicar o patch fresco...")
         shutil.copy2(backup_path, asar_path)
         
-    # 4. Extrai
     try:
         subprocess.run(
             f'npx -y asar extract "{asar_path}" "{extracted_dir}"',
@@ -50,11 +218,9 @@ def patch_qwen():
         print("Erro na extracao:", e)
         sys.exit(1)
         
-    # 5. Modificações cirurgicas no index.js
     main_js_path = extracted_dir / "out" / "main" / "index.js"
     content = main_js_path.read_text(encoding="utf-8")
     
-    # Substitui o handler IPC original pelo nosso interceptador wrapper
     original_ipc_line = 'electron.ipcMain.handle("mcp_client_tool_call", mcpClientToolCall);'
     patched_ipc_line = """electron.ipcMain.handle("mcp_client_tool_call", async (event, params) => {
     console.log('[PATCH-MCP] Interceptada chamada de ferramenta:', params);
@@ -74,19 +240,21 @@ def patch_qwen():
     else:
         print("Aviso: Linha original do IPC mcp_client_tool_call nao encontrada.")
         
-    # Injeta o servidor HTTP interno no final da funcao registerIPC
     original_register_ipc_end = """    if (type === "TEST_EVENT") {
       sendEvent("TEST_EVENT", "this msg comes from main process");
     }
   });
 };"""
 
+    # Escapa aspas e barras para injetar de forma segura no index.js do Electron
+    escaped_monitor_js = MONITOR_JS_CODE.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+
     patched_register_ipc_end = """    if (type === "TEST_EVENT") {
       sendEvent("TEST_EVENT", "this msg comes from main process");
     }
   });
 
-  // --- INICIO DO PATCH HTTP ---
+  // --- INICIO DO PATCH HTTP E AGENT LOOP ---
   try {
     const patch_http = require('http');
     const http_port = parseInt(process.env.QWEN_HTTP_PORT || '8780', 10);
@@ -115,6 +283,26 @@ def patch_qwen():
             webviewReady: !!webViewContents && !webViewContents.isDestroyed(),
             webviewUrl: webViewContents && !webViewContents.isDestroyed() ? webViewContents.getURL() : null
           }));
+          return;
+        }
+
+        if (url.pathname === '/tool-call' && req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => body += chunk);
+          req.on('end', async () => {
+            try {
+              const params = JSON.parse(body);
+              console.log('[PATCH-HTTP] Recebida chamada /tool-call:', params);
+              const eventMock = { sender: webViewContents };
+              const result = await mcpClientToolCall(eventMock, params);
+              res.writeHead(200);
+              res.end(JSON.stringify({ result }));
+            } catch (err) {
+              console.error('[PATCH-HTTP] Erro em /tool-call:', err);
+              res.writeHead(500);
+              res.end(JSON.stringify({ error: err.message }));
+            }
+          });
           return;
         }
 
@@ -149,49 +337,71 @@ def patch_qwen():
 
     server.on('error', (err) => {
       console.error('[PATCH] Erro no servidor HTTP:', err);
-      try {
-        const patchFs = require('fs');
-        patchFs.writeFileSync('C:\\\\Users\\\\tiago\\\\Desktop\\\\mcp-ultra-reborn\\\\patch-http-error.txt', 'Erro assincrono HTTP: ' + err.stack);
-      } catch (e) {}
     });
 
     server.listen(http_port, '127.0.0.1', () => {
       console.log(`[PATCH] Servidor HTTP interno rodando em http://127.0.0.1:${http_port}`);
     });
 
-    // Interceptor de rede na sessao default
-    const ses = electron.session.defaultSession;
-    ses.webRequest.onCompleted({ urls: ['https://chat.qwen.ai/api/chat/stream*'] }, (details) => {
-      console.log('[PATCH-NET] Requisicao de stream concluida:', details.url);
+    // Loop de injeção contínua robusta do monitor de DOM
+    const monitorJs = `{escaped_monitor_js}`;
+    
+    const tentarInjetar = async () => {
+      try {
+        if (!webViewContents || webViewContents.isDestroyed()) return;
+        const ativo = await webViewContents.executeJavaScript("window.__qwen_monitor_active || false");
+        if (!ativo) {
+          console.log('[PATCH-DOM] Injetando monitor de DOM...');
+          await webViewContents.executeJavaScript(monitorJs);
+          console.log('[PATCH-DOM] Monitor de DOM injetado com sucesso.');
+        }
+      } catch (e) {
+        // Ignora erros enquanto a página carrega
+      }
+    };
+
+    electron.ipcMain.removeHandler("webview-loaded");
+    electron.ipcMain.handle("webview-loaded", async (event, id) => {
+      const res = await webviewLoaded(event, id);
+      if (webViewContents && !webViewContents.isDestroyed()) {
+        console.log('[PATCH-DOM] Webview carregada. Configurando escutas e timer...');
+        
+        // Injeta imediatamente
+        tentarInjetar();
+
+        // Injeta a cada evento de navegação ou fim de load
+        webViewContents.on('dom-ready', tentarInjetar);
+        webViewContents.on('did-navigate', tentarInjetar);
+        webViewContents.on('did-navigate-in-page', tentarInjetar);
+
+        // Timer de segurança de 3 segundos para re-injetar caso suma por qualquer motivo
+        if (global.qwen_monitor_interval) clearInterval(global.qwen_monitor_interval);
+        global.qwen_monitor_interval = setInterval(tentarInjetar, 3000);
+      }
+      return res;
     });
 
   } catch (err) {
-    try {
-      const patchFs = require('fs');
-      patchFs.writeFileSync('C:\\\\Users\\\\tiago\\\\Desktop\\\\mcp-ultra-reborn\\\\patch-http-error.txt', 'Erro de inicializacao HTTP: ' + err.stack);
-    } catch (e) {}
     console.error('[PATCH] Erro durante inicializacao do patch HTTP:', err);
   }
   // --- FIM DO PATCH HTTP ---
-};"""
+};""".replace('{escaped_monitor_js}', escaped_monitor_js)
 
     if original_register_ipc_end in content:
         content = content.replace(original_register_ipc_end, patched_register_ipc_end)
-        print("-> Servidor HTTP e interceptor de rede injetados em registerIPC.")
+        print("-> Servidor HTTP e Agent Loop injetados em registerIPC.")
     else:
         original_register_ipc_end_crlf = original_register_ipc_end.replace('\n', '\r\n')
         patched_register_ipc_end_crlf = patched_register_ipc_end.replace('\n', '\r\n')
         if original_register_ipc_end_crlf in content:
             content = content.replace(original_register_ipc_end_crlf, patched_register_ipc_end_crlf)
-            print("-> Servidor HTTP e interceptor de rede injetados em registerIPC (CRLF).")
+            print("-> Servidor HTTP e Agent Loop injetados em registerIPC (CRLF).")
         else:
             print("Erro: Nao consegui localizar o final da funcao registerIPC no arquivo.")
             sys.exit(1)
             
-    # Grava o novo index.js
     main_js_path.write_text(content, encoding="utf-8")
     
-    # 6. Recompacta
     print("Recompactando app.asar...")
     try:
         subprocess.run(
