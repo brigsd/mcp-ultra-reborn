@@ -11,6 +11,7 @@ MONITOR_JS_CODE = """
   console.log('[QWEN-MONITOR] Ativo.');
 
   let lastProcessedText = "";
+  let lastUrl = "";
 
   function preencherTextarea(text) {
     const ta = document.querySelector('textarea.message-input-textarea, textarea[placeholder]');
@@ -43,6 +44,65 @@ MONITOR_JS_CODE = """
       return true;
     }
     return false;
+  }
+
+  // Ativação automática do modo MCP
+  function garantirMCPAtivo() {
+    if (window.__mcp_auto_activated) return;
+    
+    const plusBtn = document.querySelector('.mode-select-open');
+    if (!plusBtn) return;
+    
+    const currentModeEl = document.querySelector('.mode-select-current-mode');
+    const isMCP = currentModeEl && currentModeEl.innerText.includes('MCP');
+    
+    if (isMCP) {
+      window.__mcp_auto_activated = true;
+      return;
+    }
+
+    console.log('[QWEN-MONITOR] Ativando modo MCP automaticamente...');
+    window.__mcp_auto_activated = true;
+    
+    plusBtn.click();
+    
+    setTimeout(() => {
+      const dropdowns = document.querySelectorAll('.ant-dropdown, .ant-popover, [class*="dropdown"], [class*="popover"]');
+      let mcpOption = null;
+      let ferramentasSwitch = null;
+
+      for (const dd of dropdowns) {
+        const items = Array.from(dd.querySelectorAll('*'));
+        for (const item of items) {
+          if (item.children.length === 0 && item.innerText === 'MCP') {
+            mcpOption = item.closest('li, div, [role="menuitem"], button') || item;
+          }
+          if (item.innerText === 'Ferramentas') {
+            const parent = item.closest('div, li');
+            if (parent) {
+              ferramentasSwitch = parent.querySelector('button[role="switch"], .ant-switch, [role="checkbox"]');
+            }
+          }
+        }
+      }
+
+      if (ferramentasSwitch) {
+        const checked = ferramentasSwitch.getAttribute('aria-checked') === 'true' || 
+                        ferramentasSwitch.classList.contains('ant-switch-checked') ||
+                        ferramentasSwitch.classList.contains('checked');
+        if (!checked) {
+          ferramentasSwitch.click();
+        }
+      }
+
+      if (mcpOption) {
+        mcpOption.click();
+      }
+
+      setTimeout(() => {
+        plusBtn.click(); // Fecha
+      }, 100);
+    }, 150);
   }
 
   function parseToolCall(text) {
@@ -107,7 +167,6 @@ MONITOR_JS_CODE = """
     if (!msgs || msgs.length === 0) return;
     const lastMsg = msgs[msgs.length - 1];
 
-    // Verifica se a mensagem já terminou de ser gerada (presença dos botões de rodapé/ação)
     const isDone = lastMsg.querySelector('.copy-response-button, .response-message-footer, [class*="footer"], [class*="action"]');
     if (!isDone) return;
 
@@ -167,12 +226,22 @@ MONITOR_JS_CODE = """
     }
   }
 
-  const observer = new MutationObserver(() => {
+  function periodicChecks() {
+    if (window.location.href !== lastUrl) {
+      lastUrl = window.location.href;
+      window.__mcp_auto_activated = false;
+    }
+    garantirMCPAtivo();
     checkLastMessage();
+  }
+
+  const observer = new MutationObserver(() => {
+    periodicChecks();
   });
   
   observer.observe(document.body, { childList: true, subtree: true });
-  console.log('[QWEN-MONITOR] MutationObserver registrado.');
+  setInterval(periodicChecks, 2000);
+  console.log('[QWEN-MONITOR] MutationObserver e Interval registrado.');
 })();
 """
 
