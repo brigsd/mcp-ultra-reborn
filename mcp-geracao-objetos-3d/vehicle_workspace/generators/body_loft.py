@@ -176,9 +176,13 @@ def _ring(x, hw, tz, bz, tumble, ny, nu, nl, k):
     return pts
 
 
-def _loft(name, rings, material):
+def _loft(name, rings, material, crease_columns=None, crease_value=0.85):
     """Constroi malha-tubo fechada a partir de uma lista de aneis (cada anel =
-    lista de pontos de mesmo tamanho k)."""
+    lista de pontos de mesmo tamanho k).
+
+    crease_columns: indices de ponto do anel cujas arestas longitudinais viram
+    vinco (linha de carater dura) sob o Subdivision Surface -> tira o aspecto
+    "sabonete" (ex.: ombro/cintura)."""
     import bmesh  # type: ignore
     import bpy  # type: ignore
 
@@ -220,6 +224,17 @@ def _loft(name, rings, material):
     bm = bmesh.new()
     bm.from_mesh(mesh)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    if crease_columns:
+        nst = len(rings)
+        targets = set()
+        for r in range(nst - 1):
+            for i in crease_columns:
+                targets.add(frozenset((r * k + i, (r + 1) * k + i)))
+        cl = bm.edges.layers.float.new("crease_edge")
+        bm.verts.ensure_lookup_table()
+        for e in bm.edges:
+            if frozenset((e.verts[0].index, e.verts[1].index)) in targets:
+                e[cl] = crease_value
     bm.to_mesh(mesh)
     bm.free()
 
@@ -247,7 +262,11 @@ def _build_lower_body(prof, material, k=26, stations=33):
             x, prof["half_width"](s), prof["deck_z"](s), prof["bottom_z"](s),
             tumble=0.06, ny=ny, nu=nu, nl=nl, k=k,
         ))
-    return _loft("vehicle_body_main", rings, material)
+    # vincos: ombro/cintura (i=0, k/2) + sill inferior (simetricos)
+    half = k // 2
+    crease_cols = [0, half, (half + 3) % k, (k - 3) % k]
+    return _loft("vehicle_body_main", rings, material,
+                 crease_columns=crease_cols, crease_value=0.8)
 
 
 def _build_greenhouse(prof, material, k=20, stations=16):
