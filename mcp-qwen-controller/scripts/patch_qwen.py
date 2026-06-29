@@ -8,7 +8,7 @@ MONITOR_JS_CODE = """
 (function() {
   if (window.__qwen_monitor_active) return;
   window.__qwen_monitor_active = true;
-  console.log('[QWEN-MONITOR] Ativo.');
+  console.log('[QWEN-MONITOR] Ativo (Modo Intervalo Seguro).');
 
   let lastProcessedText = "";
   let lastUrl = "";
@@ -100,7 +100,9 @@ MONITOR_JS_CODE = """
       }
 
       setTimeout(() => {
-        plusBtn.click(); // Fecha
+        // Encontra o plusBtn atualizado (ou re-captura se destruído) e fecha
+        const closeBtn = document.querySelector('.mode-select-open') || plusBtn;
+        closeBtn.click();
       }, 100);
     }, 150);
   }
@@ -235,13 +237,9 @@ MONITOR_JS_CODE = """
     checkLastMessage();
   }
 
-  const observer = new MutationObserver(() => {
-    periodicChecks();
-  });
-  
-  observer.observe(document.body, { childList: true, subtree: true });
-  setInterval(periodicChecks, 2000);
-  console.log('[QWEN-MONITOR] MutationObserver e Interval registrado.');
+  // Executa checagem periódica a cada 1.5s (robusto e livre de reentrância do MutationObserver)
+  setInterval(periodicChecks, 1500);
+  console.log('[QWEN-MONITOR] Intervalo de checagem seguro registrado.');
 })();
 """
 
