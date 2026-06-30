@@ -1,2 +1,0 @@
-"""Blender-side vehicle generators."""
-

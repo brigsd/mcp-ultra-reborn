@@ -1,2 +1,0 @@
-"""Procedural vehicle generation workspace."""
-
